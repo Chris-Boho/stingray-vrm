@@ -33,6 +33,21 @@
         "priority": "default"
       }
     ],
+    "configuration": {
+      "title": "VRM Editor",
+      "properties": {
+        "vrmEditor.autoSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically save changes to VRM file after a delay"
+        },
+        "vrmEditor.autoSaveDelay": {
+          "type": "number",
+          "default": 500,
+          "description": "Delay in milliseconds before auto-saving changes"
+        }
+      }
+    },
     "commands": [
       {
         "command": "vrmEditor.openHtml",
@@ -52,13 +67,6 @@
     ],
     "menus": {
       "explorer/context": [
-        {
-          "when": "resourceExtname == .vrm",
-          "command": "vrmEditor.openVrmEditor",
-          "group": "navigation"
-        }
-      ],
-      "editor/title": [
         {
           "when": "resourceExtname == .vrm",
           "command": "vrmEditor.openVrmEditor",

@@ -3,17 +3,17 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { VrmDocument } from './VrmDocument';
 import { VrmParser } from './VrmParser';
+import { VrmVisualEditor } from './VrmVisualEditor';
 
 export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private static readonly viewType = 'vrmEditor.vrm';
     private activeDocument: VrmDocument | undefined;
     private tempFiles: Map<string, { htmlPath?: string; jsPath?: string; watchers: vscode.FileSystemWatcher[] }> = new Map();
+    private visualEditor: VrmVisualEditor | undefined;
 
     constructor(private readonly context: vscode.ExtensionContext) {
-        // Clean up temp files when extension deactivates
-        this.context.subscriptions.push({
-            dispose: () => this.cleanupAllTempFiles()
-        });
+        // Note: Removed cleanup on extension deactivate to preserve temp files
+        // Temp files are only cleaned up when individual VRM files are closed
     }
 
     public async resolveCustomTextEditor(
@@ -25,6 +25,9 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         
         // Create VRM document wrapper
         this.activeDocument = new VrmDocument(document);
+
+        // Initialize visual editor
+        this.visualEditor = new VrmVisualEditor(webviewPanel.webview);
 
         // Setup webview
         webviewPanel.webview.options = {
@@ -43,6 +46,9 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     case 'openJs':
                         this.openJsEditor();
                         break;
+                    case 'updateComponent':
+                        this.updateComponent(message.component);
+                        break;
                 }
             },
             undefined,
@@ -57,10 +63,14 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             }
         });
 
-        // Clean up temp files when webview is disposed
+        // Clean up temp files when webview is disposed (in resolveCustomTextEditor method)
         webviewPanel.onDidDispose(() => {
             changeDocumentSubscription.dispose();
-            this.cleanupTempFiles(document.uri.fsPath);
+            
+            // Enhanced cleanup - this ensures cleanup happens when VRM tab is closed
+            this.closeVrmEditorsAndCleanup(document.uri.fsPath).catch(error => {
+                console.error('Error during VRM cleanup:', error);
+            });
         });
 
         this.updateWebview(webviewPanel.webview);
@@ -104,13 +114,12 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
     private generateTempFileName(vrmPath: string, extension: string): string {
         const vrmName = path.basename(vrmPath, '.vrm');
-        const timestamp = Date.now();
-        return `${vrmName}.${timestamp}.${extension}`;
+        return `${vrmName}.vrm.${extension}`;
     }
 
     private cleanupTempFiles(vrmPath: string): void {
         const tempInfo = this.tempFiles.get(vrmPath);
-        if (!tempInfo) return;
+        if (!tempInfo) {return;}
 
         // Dispose watchers
         tempInfo.watchers.forEach(watcher => watcher.dispose());
@@ -130,10 +139,117 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         this.tempFiles.delete(vrmPath);
     }
 
-    private cleanupAllTempFiles(): void {
-        for (const vrmPath of this.tempFiles.keys()) {
-            this.cleanupTempFiles(vrmPath);
+    private async closeVrmEditorsAndCleanup(vrmPath: string): Promise<void> {
+        const tempInfo = this.tempFiles.get(vrmPath);
+        console.log("tab closed");
+        // Close any open HTML/JS editors for this VRM file
+        const editorsToClose: vscode.TextEditor[] = [];
+        
+        // Get the VRM filename without extension for pattern matching
+        const vrmFileName = path.basename(vrmPath, '.vrm');
+        const tempDir = this.getTempDirectory();
+        
+        // Find editors that match this VRM file's temp files
+        for (const editor of vscode.window.visibleTextEditors) {
+            const editorPath = editor.document.uri.fsPath;
+            const editorFileName = path.basename(editorPath);
+            console.log("editors filenames: ", editorFileName);
+            
+            // Check if this editor is editing a temp file for this VRM
+            if (editorFileName === `${vrmFileName}.vrm.html` || 
+                editorFileName === `${vrmFileName}.vrm.js`) {
+                editorsToClose.push(editor);
+            }
         }
+
+        // Close the editors
+        for (const editor of editorsToClose) {
+            await vscode.window.showTextDocument(editor.document);
+            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+        }
+
+        // Clean up temp files using both tracked info AND directory scan
+        await this.cleanupTempFilesForVrm(vrmPath, vrmFileName, tempDir);
+        
+        // Remove from tracking map
+        if (tempInfo) {
+            // Dispose watchers
+            tempInfo.watchers.forEach(watcher => watcher.dispose());
+            this.tempFiles.delete(vrmPath);
+        }
+    }
+
+    private async cleanupTempFilesForVrm(vrmPath: string, vrmFileName: string, tempDir: string): Promise<void> {
+        try {
+            // Method 1: Clean up tracked files
+            const tempInfo = this.tempFiles.get(vrmPath);
+            if (tempInfo) {
+                if (tempInfo.htmlPath && fs.existsSync(tempInfo.htmlPath)) {
+                    fs.unlinkSync(tempInfo.htmlPath);
+                    console.log(`Cleaned up tracked HTML file: ${tempInfo.htmlPath}`);
+                }
+                if (tempInfo.jsPath && fs.existsSync(tempInfo.jsPath)) {
+                    fs.unlinkSync(tempInfo.jsPath);
+                    console.log(`Cleaned up tracked JS file: ${tempInfo.jsPath}`);
+                }
+            }
+
+            // Method 2: Scan temp directory for any remaining files matching this VRM
+            if (fs.existsSync(tempDir)) {
+                const files = fs.readdirSync(tempDir);
+                
+                for (const file of files) {
+                    // Check if file matches pattern: filename.vrm.html or filename.vrm.js
+                    if (file === `${vrmFileName}.vrm.html` || file === `${vrmFileName}.vrm.js`) {
+                        const filePath = path.join(tempDir, file);
+                        try {
+                            fs.unlinkSync(filePath);
+                            console.log(`Cleaned up orphaned temp file: ${filePath}`);
+                        } catch (error) {
+                            console.warn(`Could not delete temp file ${filePath}:`, error);
+                        }
+                    }
+                }
+            }
+
+        } catch (error) {
+            console.warn('Error during temp file cleanup:', error);
+        }
+    }
+
+    // Also add a method to clean up ALL temp files when extension deactivates (optional)
+    private cleanupAllTempFiles(): void {
+        try {
+            // Clean up tracked files first
+            for (const vrmPath of this.tempFiles.keys()) {
+                const vrmFileName = path.basename(vrmPath, '.vrm');
+                const tempDir = this.getTempDirectory();
+                this.cleanupTempFilesForVrm(vrmPath, vrmFileName, tempDir);
+            }
+            
+            // Clear the tracking map
+            this.tempFiles.clear();
+            
+            // Optional: Remove entire temp directory if empty
+            const tempDir = this.getTempDirectory();
+            if (fs.existsSync(tempDir)) {
+                const files = fs.readdirSync(tempDir);
+                if (files.length === 0) {
+                    fs.rmdirSync(tempDir);
+                    console.log('Removed empty temp directory');
+                }
+            }
+            
+        } catch (error) {
+            console.warn('Error during full cleanup:', error);
+        }
+    }
+
+    // Add this method to VrmEditorProvider class for manual cleanup if needed
+    public async forceCleanupForVrm(vrmPath: string): Promise<void> {
+        const vrmFileName = path.basename(vrmPath, '.vrm');
+        const tempDir = this.getTempDirectory();
+        await this.cleanupTempFilesForVrm(vrmPath, vrmFileName, tempDir);
     }
 
     public async openHtmlEditor(): Promise<void> {
@@ -148,6 +264,17 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             const htmlFileName = this.generateTempFileName(vrmPath, 'html');
             const htmlFilePath = path.join(tempDir, htmlFileName);
 
+            // Check if file already exists and is open in an editor
+            const existingEditor = vscode.window.visibleTextEditors.find(
+                editor => editor.document.uri.fsPath === htmlFilePath
+            );
+
+            if (existingEditor) {
+                // File is already open, just focus on it
+                await vscode.window.showTextDocument(existingEditor.document, { preview: false });
+                return;
+            }
+
             // Get or create temp file info
             let tempInfo = this.tempFiles.get(vrmPath);
             if (!tempInfo) {
@@ -155,48 +282,79 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 this.tempFiles.set(vrmPath, tempInfo);
             }
 
-            // Clean up existing HTML file if it exists
-            if (tempInfo.htmlPath && fs.existsSync(tempInfo.htmlPath)) {
-                fs.unlinkSync(tempInfo.htmlPath);
-            }
-
-            // Write HTML content to temp file
+            // Always replace temp file with current VRM content
+            let doc: vscode.TextDocument;
             const htmlContent = this.activeDocument.getHtmlContent();
             fs.writeFileSync(htmlFilePath, htmlContent, 'utf8');
+            doc = await vscode.workspace.openTextDocument(htmlFilePath);
+
             tempInfo.htmlPath = htmlFilePath;
+            await vscode.window.showTextDocument(doc, { preview: false });
 
-            // Open the temp file
-            const doc = await vscode.workspace.openTextDocument(htmlFilePath);
-            await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+            // Set up file watcher if not already watching
+            const existingWatcher = tempInfo.watchers.find(w => (w as any)._pattern === htmlFilePath);
+            if (!existingWatcher) {
+                const watcher = vscode.workspace.createFileSystemWatcher(htmlFilePath);
+                tempInfo.watchers.push(watcher);
 
-            // Watch for changes to sync back to VRM
-            const watcher = vscode.workspace.createFileSystemWatcher(htmlFilePath);
-            tempInfo.watchers.push(watcher);
+                // Auto-save functionality (if enabled)
+                const autoSaveEnabled = vscode.workspace.getConfiguration('vrmEditor').get<boolean>('autoSave', false);
+                const autoSaveDelay = vscode.workspace.getConfiguration('vrmEditor').get<number>('autoSaveDelay', 500);
+                let saveTimeout: NodeJS.Timeout | undefined;
 
-            watcher.onDidChange(async () => {
-                try {
-                    const updatedContent = fs.readFileSync(htmlFilePath, 'utf8');
-                    this.activeDocument?.updateHtmlContent(updatedContent);
-                    await this.activeDocument?.getDocument().save();
-                } catch (error) {
-                    console.error('Error syncing HTML changes:', error);
-                }
-            });
+                watcher.onDidChange(async () => {
+                    try {
+                        if (autoSaveEnabled) {
+                            // Clear existing timeout
+                            if (saveTimeout) {
+                                clearTimeout(saveTimeout);
+                            }
 
-            // Clean up when editor is closed
-            const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
-                if (!editors.some(e => e.document.uri.fsPath === htmlFilePath)) {
-                    watcher.dispose();
-                    visibleEditorsChange.dispose();
-                    // Remove from watchers array
-                    const index = tempInfo!.watchers.indexOf(watcher);
-                    if (index > -1) {
-                        tempInfo!.watchers.splice(index, 1);
+                            // Set new timeout
+                            saveTimeout = setTimeout(async () => {
+                                const updatedContent = fs.readFileSync(htmlFilePath, 'utf8');
+                                this.activeDocument?.updateHtmlContent(updatedContent);
+                                await this.activeDocument?.getDocument().save();
+                            }, autoSaveDelay);
+                        }
+                    } catch (error) {
+                        console.error('Error syncing HTML changes:', error);
                     }
-                }
-            });
+                });
 
-            this.context.subscriptions.push(watcher, visibleEditorsChange);
+                // Manual save handler
+                const saveSubscription = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+                    if (savedDoc.uri.fsPath === htmlFilePath) {
+                        try {
+                            const updatedContent = savedDoc.getText();
+                            this.activeDocument?.updateHtmlContent(updatedContent);
+                            await this.activeDocument?.getDocument().save();
+                            vscode.window.showInformationMessage('HTML changes saved to VRM file');
+                        } catch (error) {
+                            console.error('Error saving HTML changes:', error);
+                        }
+                    }
+                });
+
+                // Clean up when editor is closed
+                const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
+                    if (!editors.some(e => e.document.uri.fsPath === htmlFilePath)) {
+                        if (saveTimeout) {
+                            clearTimeout(saveTimeout);
+                        }
+                        watcher.dispose();
+                        saveSubscription.dispose();
+                        visibleEditorsChange.dispose();
+                        // Remove from watchers array
+                        const index = tempInfo!.watchers.indexOf(watcher);
+                        if (index > -1) {
+                            tempInfo!.watchers.splice(index, 1);
+                        }
+                    }
+                });
+
+                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange);
+            }
 
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open HTML editor: ${error}`);
@@ -215,6 +373,17 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             const jsFileName = this.generateTempFileName(vrmPath, 'js');
             const jsFilePath = path.join(tempDir, jsFileName);
 
+            // Check if file already exists and is open in an editor
+            const existingEditor = vscode.window.visibleTextEditors.find(
+                editor => editor.document.uri.fsPath === jsFilePath
+            );
+
+            if (existingEditor) {
+                // File is already open, just focus on it
+                await vscode.window.showTextDocument(existingEditor.document, { preview: false });
+                return;
+            }
+
             // Get or create temp file info
             let tempInfo = this.tempFiles.get(vrmPath);
             if (!tempInfo) {
@@ -222,48 +391,79 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 this.tempFiles.set(vrmPath, tempInfo);
             }
 
-            // Clean up existing JS file if it exists
-            if (tempInfo.jsPath && fs.existsSync(tempInfo.jsPath)) {
-                fs.unlinkSync(tempInfo.jsPath);
-            }
-
-            // Write JavaScript content to temp file
+            // Always replace temp file with current VRM content
+            let doc: vscode.TextDocument;
             const jsContent = this.activeDocument.getJsContent();
             fs.writeFileSync(jsFilePath, jsContent, 'utf8');
+            doc = await vscode.workspace.openTextDocument(jsFilePath);
+
             tempInfo.jsPath = jsFilePath;
+            await vscode.window.showTextDocument(doc, { preview: false });
 
-            // Open the temp file
-            const doc = await vscode.workspace.openTextDocument(jsFilePath);
-            await vscode.window.showTextDocument(doc, vscode.ViewColumn.Beside);
+            // Set up file watcher if not already watching
+            const existingWatcher = tempInfo.watchers.find(w => (w as any)._pattern === jsFilePath);
+            if (!existingWatcher) {
+                const watcher = vscode.workspace.createFileSystemWatcher(jsFilePath);
+                tempInfo.watchers.push(watcher);
 
-            // Watch for changes to sync back to VRM
-            const watcher = vscode.workspace.createFileSystemWatcher(jsFilePath);
-            tempInfo.watchers.push(watcher);
+                // Auto-save functionality (if enabled)
+                const autoSaveEnabled = vscode.workspace.getConfiguration('vrmEditor').get<boolean>('autoSave', false);
+                const autoSaveDelay = vscode.workspace.getConfiguration('vrmEditor').get<number>('autoSaveDelay', 500);
+                let saveTimeout: NodeJS.Timeout | undefined;
 
-            watcher.onDidChange(async () => {
-                try {
-                    const updatedContent = fs.readFileSync(jsFilePath, 'utf8');
-                    this.activeDocument?.updateJsContent(updatedContent);
-                    await this.activeDocument?.getDocument().save();
-                } catch (error) {
-                    console.error('Error syncing JavaScript changes:', error);
-                }
-            });
+                watcher.onDidChange(async () => {
+                    try {
+                        if (autoSaveEnabled) {
+                            // Clear existing timeout
+                            if (saveTimeout) {
+                                clearTimeout(saveTimeout);
+                            }
 
-            // Clean up when editor is closed
-            const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
-                if (!editors.some(e => e.document.uri.fsPath === jsFilePath)) {
-                    watcher.dispose();
-                    visibleEditorsChange.dispose();
-                    // Remove from watchers array
-                    const index = tempInfo!.watchers.indexOf(watcher);
-                    if (index > -1) {
-                        tempInfo!.watchers.splice(index, 1);
+                            // Set new timeout
+                            saveTimeout = setTimeout(async () => {
+                                const updatedContent = fs.readFileSync(jsFilePath, 'utf8');
+                                this.activeDocument?.updateJsContent(updatedContent);
+                                await this.activeDocument?.getDocument().save();
+                            }, autoSaveDelay);
+                        }
+                    } catch (error) {
+                        console.error('Error syncing JavaScript changes:', error);
                     }
-                }
-            });
+                });
 
-            this.context.subscriptions.push(watcher, visibleEditorsChange);
+                // Manual save handler
+                const saveSubscription = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+                    if (savedDoc.uri.fsPath === jsFilePath) {
+                        try {
+                            const updatedContent = savedDoc.getText();
+                            this.activeDocument?.updateJsContent(updatedContent);
+                            await this.activeDocument?.getDocument().save();
+                            vscode.window.showInformationMessage('JavaScript changes saved to VRM file');
+                        } catch (error) {
+                            console.error('Error saving JavaScript changes:', error);
+                        }
+                    }
+                });
+
+                // Clean up when editor is closed
+                const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
+                    if (!editors.some(e => e.document.uri.fsPath === jsFilePath)) {
+                        if (saveTimeout) {
+                            clearTimeout(saveTimeout);
+                        }
+                        watcher.dispose();
+                        saveSubscription.dispose();
+                        visibleEditorsChange.dispose();
+                        // Remove from watchers array
+                        const index = tempInfo!.watchers.indexOf(watcher);
+                        if (index > -1) {
+                            tempInfo!.watchers.splice(index, 1);
+                        }
+                    }
+                });
+
+                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange);
+            }
 
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open JavaScript editor: ${error}`);
@@ -271,108 +471,236 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     private getHtmlForWebview(webview: vscode.Webview): string {
-        return `<!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>VRM Editor</title>
-            <style>
-                body {
-                    font-family: var(--vscode-font-family);
-                    font-size: var(--vscode-font-size);
-                    color: var(--vscode-foreground);
-                    background-color: var(--vscode-editor-background);
-                    padding: 20px;
-                }
-                .container {
-                    max-width: 800px;
-                    margin: 0 auto;
-                }
-                .section {
-                    margin-bottom: 30px;
-                    padding: 20px;
-                    border: 1px solid var(--vscode-panel-border);
-                    border-radius: 6px;
-                }
-                .button {
-                    background-color: var(--vscode-button-background);
-                    color: var(--vscode-button-foreground);
-                    border: none;
-                    padding: 8px 16px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    margin-right: 10px;
-                }
-                .button:hover {
-                    background-color: var(--vscode-button-hoverBackground);
-                }
-                .preview {
-                    background-color: var(--vscode-editor-background);
-                    border: 1px solid var(--vscode-input-border);
-                    padding: 10px;
-                    border-radius: 4px;
-                    font-family: var(--vscode-editor-font-family);
-                    font-size: var(--vscode-editor-font-size);
-                    max-height: 200px;
-                    overflow-y: auto;
-                    white-space: pre-wrap;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>VRM File Editor</h1>
-                
-                <div class="section">
-                    <h2>HTML Content</h2>
-                    <button class="button" onclick="openHtml()">Open HTML Editor</button>
-                    <div class="preview" id="htmlPreview"></div>
-                </div>
-                
-                <div class="section">
-                    <h2>JavaScript Content</h2>
-                    <button class="button" onclick="openJs()">Open JavaScript Editor</button>
-                    <div class="preview" id="jsPreview"></div>
-                </div>
-            </div>
+      // Parse components from VRM file with section information
+      const vrmContent = this.activeDocument?.getDocument().getText() || '';
+      
+      // Parse both sections separately to maintain section identity
+      const preprocMatch = vrmContent.match(/<preproc>([\s\S]*?)<\/preproc>/);
+      const postprocMatch = vrmContent.match(/<postproc>([\s\S]*?)<\/postproc>/);
+      
+      let allComponents: any[] = [];
+      
+      if (this.visualEditor) {
+          if (preprocMatch) {
+              const preprocComponents = this.visualEditor.parseComponentSection(preprocMatch[1], 'preproc');
+              allComponents = allComponents.concat(preprocComponents);
+          }
+          
+          if (postprocMatch) {
+              const postprocComponents = this.visualEditor.parseComponentSection(postprocMatch[1], 'postproc');
+              allComponents = allComponents.concat(postprocComponents);
+          }
+      }
+      
+      return `<!DOCTYPE html>
+      <html lang="en">
+      <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>VRM Editor</title>
+          <style>
+              body {
+                  font-family: var(--vscode-font-family);
+                  font-size: var(--vscode-font-size);
+                  color: var(--vscode-foreground);
+                  background-color: var(--vscode-editor-background);
+                  padding: 20px;
+                  margin: 0;
+              }
+              .header {
+                  display: flex;
+                  gap: 10px;
+                  margin-bottom: 30px;
+                  padding-bottom: 15px;
+                  border-bottom: 1px solid var(--vscode-panel-border);
+              }
+              .button {
+                  background-color: var(--vscode-button-background);
+                  color: var(--vscode-button-foreground);
+                  border: none;
+                  padding: 10px 20px;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 14px;
+                  font-weight: 500;
+              }
+              .button:hover {
+                  background-color: var(--vscode-button-hoverBackground);
+              }
+              .content {
+                  max-width: 1200px;
+              }
+              h1 {
+                  margin: 0 0 20px 0;
+                  font-size: 24px;
+                  font-weight: 600;
+              }
+          </style>
+      </head>
+      <body>
+          <h1>VRM File Editor</h1>
+          
+          <div class="header">
+              <button class="button" onclick="openHtml()">Open HTML Editor</button>
+              <button class="button" onclick="openJs()">Open JavaScript Editor</button>
+          </div>
+          
+          <div class="content">
+              ${this.visualEditor?.generateVisualEditorHtml() || ''}
+          </div>
+          
+          <script>
+              const vscode = acquireVsCodeApi();
+              
+              function openHtml() {
+                  vscode.postMessage({ command: 'openHtml' });
+              }
+              
+              function openJs() {
+                  vscode.postMessage({ command: 'openJs' });
+              }
+              
+              // Initialize the visual editor with components (including section info)
+              window.addEventListener('DOMContentLoaded', function() {
+                  const components = ${JSON.stringify(allComponents)};
+                  if (typeof renderComponents === 'function') {
+                      renderComponents(components);
+                  }
+              });
+              
+              // Handle messages from extension
+              window.addEventListener('message', event => {
+                  const message = event.data;
+                  switch (message.type) {
+                      case 'updateComponents':
+                          if (typeof renderComponents === 'function') {
+                              renderComponents(message.components);
+                          }
+                          break;
+                  }
+              });
+          </script>
+      </body>
+      </html>`;
+  }
+
+    private updateComponent(updatedComponent: any): void {
+        if (!this.activeDocument) {return;}
+        
+        try {
+            // Get current VRM content
+            const currentContent = this.activeDocument.getDocument().getText();
             
-            <script>
-                const vscode = acquireVsCodeApi();
-                
-                function openHtml() {
-                    vscode.postMessage({ command: 'openHtml' });
-                }
-                
-                function openJs() {
-                    vscode.postMessage({ command: 'openJs' });
-                }
-                
-                window.addEventListener('message', event => {
-                    const message = event.data;
-                    switch (message.type) {
-                        case 'update':
-                            updatePreviews(message.html, message.js);
-                            break;
-                    }
+            // Update the component in the XML
+            const updatedContent = this.updateComponentInXml(currentContent, updatedComponent);
+            
+            // Apply the changes to the document
+            const edit = new vscode.WorkspaceEdit();
+            const fullRange = new vscode.Range(
+                this.activeDocument.getDocument().positionAt(0),
+                this.activeDocument.getDocument().positionAt(currentContent.length)
+            );
+            edit.replace(this.activeDocument.getDocument().uri, fullRange, updatedContent);
+            vscode.workspace.applyEdit(edit);
+            
+        } catch (error) {
+            vscode.window.showErrorMessage(`Failed to update component: ${error}`);
+        }
+    }
+
+    private updateComponentInXml(xmlContent: string, updatedComponent: any): string {
+        // This is a simplified approach - in a real implementation you'd want more robust XML manipulation
+        // For now, we'll update the component by finding and replacing the specific component XML
+        
+        // Find the component in both preproc and postproc sections
+        const preprocMatch = xmlContent.match(/<preproc>([\s\S]*?)<\/preproc>/);
+        const postprocMatch = xmlContent.match(/<postproc>([\s\S]*?)<\/postproc>/);
+        
+        let updatedXml = xmlContent;
+        
+        if (preprocMatch) {
+            const updatedPreproc = this.updateComponentInSection(preprocMatch[1], updatedComponent);
+            updatedXml = updatedXml.replace(preprocMatch[1], updatedPreproc);
+        }
+        
+        if (postprocMatch) {
+            const updatedPostproc = this.updateComponentInSection(postprocMatch[1], updatedComponent);
+            updatedXml = updatedXml.replace(postprocMatch[1], updatedPostproc);
+        }
+        
+        return updatedXml;
+    }
+
+    private updateComponentInSection(sectionContent: string, updatedComponent: any): string {
+        // Find the specific component by ID
+        const componentRegex = new RegExp(`<c>\\s*<n>${updatedComponent.n}</n>[\\s\\S]*?</c>`, 'g');
+        
+        return sectionContent.replace(componentRegex, (match) => {
+            // Generate updated component XML
+            return this.generateComponentXml(updatedComponent);
+        });
+    }
+
+    private generateComponentXml(component: any): string {
+        let xml = `<c>
+            <n>${component.n}</n>
+            <t>${component.t}</t>`;
+        
+        // Add values section if it exists
+        if (component.values) {
+            xml += '\n            <values>';
+            
+            // Add conditions
+            if (component.values.conditions) {
+                component.values.conditions.forEach((condition: string) => {
+                    xml += `\n                <v><![CDATA[${condition}]]></v>`;
                 });
-                
-                function updatePreviews(html, js) {
-                    document.getElementById('htmlPreview').textContent = html.substring(0, 500) + (html.length > 500 ? '...' : '');
-                    document.getElementById('jsPreview').textContent = js.substring(0, 500) + (js.length > 500 ? '...' : '');
-                }
-            </script>
-        </body>
-        </html>`;
+            }
+            
+            // Add query
+            if (component.values.query) {
+                xml += `\n                <query><![CDATA[${component.values.query}]]></query>`;
+            }
+            
+            // Add parameters
+            if (component.values.params) {
+                component.values.params.forEach((param: any) => {
+                    xml += `\n                <param>
+                    <n>${param.name}</n>
+                    <t>${param.type}</t>
+                    <v><![CDATA[${param.value}]]></v>
+                </param>`;
+                });
+            }
+            
+            xml += '\n            </values>';
+        }
+        
+        // Add connections
+        component.j.forEach((jump: number) => {
+            if (jump > 0) {
+                xml += `\n            <j>${jump}</j>`;
+            } else {
+                xml += '\n            <j/>';
+            }
+        });
+        
+        // Add position and metadata
+        xml += `\n            <x>${component.x}</x>
+            <y>${component.y}</y>
+            <c>${component.c}</c>
+            <wp>${component.wp ? '1' : '0'}</wp>
+        </c>`;
+        
+        return xml;
     }
 
     private updateWebview(webview: vscode.Webview): void {
-        if (!this.activeDocument) return;
-        
-        webview.postMessage({
-            type: 'update',
-            html: this.activeDocument.getHtmlContent(),
-            js: this.activeDocument.getJsContent()
-        });
+        // Parse components and update visual editor
+        if (this.activeDocument && this.visualEditor) {
+            const vrmContent = this.activeDocument.getDocument().getText();
+            const components = this.visualEditor.parseComponents(vrmContent);
+            this.visualEditor.updateWebview(components);
+        }
     }
 }
