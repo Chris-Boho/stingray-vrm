@@ -10,6 +10,11 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private activeDocument: VrmDocument | undefined;
     private tempFiles: Map<string, { htmlPath?: string; jsPath?: string; watchers: vscode.FileSystemWatcher[] }> = new Map();
     private visualEditor: VrmVisualEditor | undefined;
+    
+    // Add batching mechanism
+    private pendingUpdates: Map<number, any> = new Map();
+    private updateTimeout: NodeJS.Timeout | undefined;
+    private readonly UPDATE_DEBOUNCE_MS = 100;
 
     constructor(private readonly context: vscode.ExtensionContext) {
         // Note: Removed cleanup on extension deactivate to preserve temp files
@@ -49,6 +54,9 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     case 'updateComponent':
                         this.updateComponent(message.component);
                         break;
+                    case 'updateComponents':
+                        this.updateComponents(message.components);
+                        break;
                 }
             },
             undefined,
@@ -74,6 +82,102 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         });
 
         this.updateWebview(webviewPanel.webview);
+    }
+
+    private updateComponents(updatedComponents: any[]): void {
+        if (!this.activeDocument) {
+            console.error('No active document for batch component update');
+            return;
+        }
+        
+        console.log(`Received batch update for ${updatedComponents.length} components`);
+        
+        // Add all components to pending updates (this will overwrite any existing pending updates for the same components)
+        updatedComponents.forEach(component => {
+            this.pendingUpdates.set(component.n, component);
+        });
+        
+        // Clear existing timeout and set a new one
+        if (this.updateTimeout) {
+            clearTimeout(this.updateTimeout);
+        }
+        
+        this.updateTimeout = setTimeout(() => {
+            this.processPendingUpdates();
+        }, this.UPDATE_DEBOUNCE_MS);
+    }
+    
+    private async processPendingUpdates(): Promise<void> {
+        if (!this.activeDocument || this.pendingUpdates.size === 0) {
+            return;
+        }
+        
+        const componentsToUpdate = Array.from(this.pendingUpdates.values());
+        this.pendingUpdates.clear();
+        
+        console.log(`Processing ${componentsToUpdate.length} pending component updates`);
+        
+        try {
+            // Get current VRM content
+            let currentContent = this.activeDocument.getDocument().getText();
+            
+            // Update each component in the XML sequentially
+            for (const updatedComponent of componentsToUpdate) {
+                console.log(`Updating component ${updatedComponent.n} to (${updatedComponent.x}, ${updatedComponent.y})`);
+                currentContent = this.updateComponentInXml(currentContent, updatedComponent);
+            }
+            
+            // Apply all changes in a single edit with retry logic
+            await this.applyEditWithRetry(currentContent);
+            
+        } catch (error) {
+            console.error('Error in batch component update:', error);
+            vscode.window.showErrorMessage(`Failed to update components: ${error}`);
+        }
+    }
+    
+    private async applyEditWithRetry(newContent: string, maxRetries: number = 3): Promise<void> {
+        if (!this.activeDocument) {
+            throw new Error('No active document');
+        }
+        
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`Applying edit attempt ${attempt}/${maxRetries}`);
+                
+                // Create fresh document reference each time
+                const currentDocument = this.activeDocument.getDocument();
+                const edit = new vscode.WorkspaceEdit();
+                const fullRange = new vscode.Range(
+                    currentDocument.positionAt(0),
+                    currentDocument.positionAt(currentDocument.getText().length)
+                );
+                
+                edit.replace(currentDocument.uri, fullRange, newContent);
+                
+                const success = await vscode.workspace.applyEdit(edit);
+                
+                if (success) {
+                    console.log(`Successfully applied edit on attempt ${attempt}`);
+                    return;
+                } else {
+                    throw new Error('Workspace edit returned false');
+                }
+                
+            } catch (error) {
+                console.warn(`Edit attempt ${attempt} failed:`, error);
+                
+                if (attempt === maxRetries) {
+                    throw new Error(`Failed to apply edit after ${maxRetries} attempts: ${error}`);
+                }
+                
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, 50 * attempt));
+                
+                // Refresh the document reference
+                this.activeDocument = new VrmDocument(this.activeDocument.getDocument());
+            }
+        }
     }
 
     private getTempDirectory(): string {
@@ -585,27 +689,24 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
     private updateComponent(updatedComponent: any): void {
-        if (!this.activeDocument) {return;}
-        
-        try {
-            // Get current VRM content
-            const currentContent = this.activeDocument.getDocument().getText();
-            
-            // Update the component in the XML
-            const updatedContent = this.updateComponentInXml(currentContent, updatedComponent);
-            
-            // Apply the changes to the document
-            const edit = new vscode.WorkspaceEdit();
-            const fullRange = new vscode.Range(
-                this.activeDocument.getDocument().positionAt(0),
-                this.activeDocument.getDocument().positionAt(currentContent.length)
-            );
-            edit.replace(this.activeDocument.getDocument().uri, fullRange, updatedContent);
-            vscode.workspace.applyEdit(edit);
-            
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to update component: ${error}`);
+        if (!this.activeDocument) {
+            console.error('No active document for component update');
+            return;
         }
+        
+        console.log(`Received single update for component ${updatedComponent.n}`);
+        
+        // Add to pending updates
+        this.pendingUpdates.set(updatedComponent.n, updatedComponent);
+        
+        // Clear existing timeout and set a new one
+        if (this.updateTimeout) {
+            clearTimeout(this.updateTimeout);
+        }
+        
+        this.updateTimeout = setTimeout(() => {
+            this.processPendingUpdates();
+        }, this.UPDATE_DEBOUNCE_MS);
     }
 
     private updateComponentInXml(xmlContent: string, updatedComponent: any): string {
@@ -618,12 +719,12 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         
         let updatedXml = xmlContent;
         
-        if (preprocMatch) {
+        if (preprocMatch && updatedComponent.section === 'preproc') {
             const updatedPreproc = this.updateComponentInSection(preprocMatch[1], updatedComponent);
             updatedXml = updatedXml.replace(preprocMatch[1], updatedPreproc);
         }
         
-        if (postprocMatch) {
+        if (postprocMatch && updatedComponent.section === 'postproc') {
             const updatedPostproc = this.updateComponentInSection(postprocMatch[1], updatedComponent);
             updatedXml = updatedXml.replace(postprocMatch[1], updatedPostproc);
         }

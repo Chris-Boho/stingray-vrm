@@ -18,10 +18,16 @@ This extension provides a comprehensive editing experience by separating these c
 src/
 ├── extension.ts              # Main extension entry point
 ├── VrmEditorProvider.ts      # Custom editor implementation
-├── VrmDocument.ts            # Document wrapper and operations
-├── VrmParser.ts              # XML parsing and manipulation
-├── VrmVisualEditor.ts        # Visual programming interface
-
+├── VrmDocument.ts           # Document wrapper and operations
+├── VrmParser.ts             # XML parsing and manipulation
+├── VrmVisualEditor.ts       # Visual programming interface
+└── visual-editor/
+    ├── ComponentParser.ts    # Parses VRM components from XML
+    ├── ComponentXmlGenerator.ts # Generates XML from components
+    ├── EditorScripts.ts     # JavaScript functionality for editor
+    ├── HtmlGenerator.ts      # Generates HTML for visual editor
+    ├── VrmComponent.ts       # Component interface definitions
+    └── styles/              # CSS styles for editor UI
 ```
 
 ## Core Files Description
