@@ -406,6 +406,25 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 const autoSaveDelay = vscode.workspace.getConfiguration('vrmEditor').get<number>('autoSaveDelay', 500);
                 let saveTimeout: NodeJS.Timeout | undefined;
 
+                // Track if we're currently saving to prevent reentrancy
+                let isSaving = false;
+
+                // Function to handle saving changes
+                const handleSave = async () => {
+                    if (isSaving) return;
+                    isSaving = true;
+                    try {
+                        const updatedContent = fs.readFileSync(htmlFilePath, 'utf8');
+                        this.activeDocument?.updateHtmlContent(updatedContent);
+                        await this.activeDocument?.getDocument().save();
+                    } catch (error) {
+                        console.error('Error saving HTML changes:', error);
+                    } finally {
+                        isSaving = false;
+                    }
+                };
+
+                // Update the file watcher to use the new save handler
                 watcher.onDidChange(async () => {
                     try {
                         if (autoSaveEnabled) {
@@ -416,9 +435,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
                             // Set new timeout
                             saveTimeout = setTimeout(async () => {
-                                const updatedContent = fs.readFileSync(htmlFilePath, 'utf8');
-                                this.activeDocument?.updateHtmlContent(updatedContent);
-                                await this.activeDocument?.getDocument().save();
+                                await handleSave();
                             }, autoSaveDelay);
                         }
                     } catch (error) {
@@ -426,29 +443,43 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     }
                 });
 
-                // Manual save handler
+                // Update the save subscription to use the new save handler
                 const saveSubscription = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
                     if (savedDoc.uri.fsPath === htmlFilePath) {
-                        try {
-                            const updatedContent = savedDoc.getText();
-                            this.activeDocument?.updateHtmlContent(updatedContent);
-                            await this.activeDocument?.getDocument().save();
-                            vscode.window.showInformationMessage('HTML changes saved to VRM file');
-                        } catch (error) {
-                            console.error('Error saving HTML changes:', error);
-                        }
+                        await handleSave();
+                        vscode.window.showInformationMessage('HTML changes saved to VRM file');
                     }
                 });
 
-                // Clean up when editor is closed
+                // Track if the editor is currently visible
+                let isEditorVisible = true;
+
+                // Handle tab visibility changes
                 const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
-                    if (!editors.some(e => e.document.uri.fsPath === htmlFilePath)) {
+                    const wasVisible = isEditorVisible;
+                    isEditorVisible = editors.some(e => e.document.uri.fsPath === htmlFilePath);
+                    
+                    // If the editor became visible again, ensure we're watching
+                    if (isEditorVisible && !wasVisible) {
+                        console.log('HTML editor became visible again');
+                    }
+                    // If the editor was closed, clean up
+                    else if (!isEditorVisible && wasVisible) {
+                        console.log('HTML editor is no longer visible');
+                    }
+                });
+
+                // Clean up when the editor is actually closed, not just when it's hidden
+                const closeSubscription = vscode.workspace.onDidCloseTextDocument(doc => {
+                    if (doc.uri.fsPath === htmlFilePath) {
+                        console.log('HTML editor was closed');
                         if (saveTimeout) {
                             clearTimeout(saveTimeout);
                         }
                         watcher.dispose();
                         saveSubscription.dispose();
                         visibleEditorsChange.dispose();
+                        closeSubscription.dispose();
                         // Remove from watchers array
                         const index = tempInfo!.watchers.indexOf(watcher);
                         if (index > -1) {
@@ -457,7 +488,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     }
                 });
 
-                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange);
+                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange, closeSubscription);
             }
 
         } catch (error) {
@@ -515,6 +546,25 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 const autoSaveDelay = vscode.workspace.getConfiguration('vrmEditor').get<number>('autoSaveDelay', 500);
                 let saveTimeout: NodeJS.Timeout | undefined;
 
+                // Track if we're currently saving to prevent reentrancy
+                let isSaving = false;
+
+                // Function to handle saving changes
+                const handleSave = async () => {
+                    if (isSaving) return;
+                    isSaving = true;
+                    try {
+                        const updatedContent = fs.readFileSync(jsFilePath, 'utf8');
+                        this.activeDocument?.updateJsContent(updatedContent);
+                        await this.activeDocument?.getDocument().save();
+                    } catch (error) {
+                        console.error('Error saving JavaScript changes:', error);
+                    } finally {
+                        isSaving = false;
+                    }
+                };
+
+                // Update the file watcher to use the new save handler
                 watcher.onDidChange(async () => {
                     try {
                         if (autoSaveEnabled) {
@@ -525,9 +575,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
                             // Set new timeout
                             saveTimeout = setTimeout(async () => {
-                                const updatedContent = fs.readFileSync(jsFilePath, 'utf8');
-                                this.activeDocument?.updateJsContent(updatedContent);
-                                await this.activeDocument?.getDocument().save();
+                                await handleSave();
                             }, autoSaveDelay);
                         }
                     } catch (error) {
@@ -535,29 +583,43 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     }
                 });
 
-                // Manual save handler
+                // Update the save subscription to use the new save handler
                 const saveSubscription = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
                     if (savedDoc.uri.fsPath === jsFilePath) {
-                        try {
-                            const updatedContent = savedDoc.getText();
-                            this.activeDocument?.updateJsContent(updatedContent);
-                            await this.activeDocument?.getDocument().save();
-                            vscode.window.showInformationMessage('JavaScript changes saved to VRM file');
-                        } catch (error) {
-                            console.error('Error saving JavaScript changes:', error);
-                        }
+                        await handleSave();
+                        vscode.window.showInformationMessage('JavaScript changes saved to VRM file');
                     }
                 });
 
-                // Clean up when editor is closed
+                // Track if the editor is currently visible
+                let isEditorVisible = true;
+
+                // Handle tab visibility changes
                 const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
-                    if (!editors.some(e => e.document.uri.fsPath === jsFilePath)) {
+                    const wasVisible = isEditorVisible;
+                    isEditorVisible = editors.some(e => e.document.uri.fsPath === jsFilePath);
+                    
+                    // If the editor became visible again, ensure we're watching
+                    if (isEditorVisible && !wasVisible) {
+                        console.log('JavaScript editor became visible again');
+                    }
+                    // If the editor was closed, clean up
+                    else if (!isEditorVisible && wasVisible) {
+                        console.log('JavaScript editor is no longer visible');
+                    }
+                });
+
+                // Clean up when the editor is actually closed, not just when it's hidden
+                const closeSubscription = vscode.workspace.onDidCloseTextDocument(doc => {
+                    if (doc.uri.fsPath === jsFilePath) {
+                        console.log('JavaScript editor was closed');
                         if (saveTimeout) {
                             clearTimeout(saveTimeout);
                         }
                         watcher.dispose();
                         saveSubscription.dispose();
                         visibleEditorsChange.dispose();
+                        closeSubscription.dispose();
                         // Remove from watchers array
                         const index = tempInfo!.watchers.indexOf(watcher);
                         if (index > -1) {
@@ -566,7 +628,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     }
                 });
 
-                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange);
+                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange, closeSubscription);
             }
 
         } catch (error) {

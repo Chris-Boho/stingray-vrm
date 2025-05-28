@@ -26,7 +26,7 @@ export class HtmlGenerator {
                     <div class="section-content active" id="preprocSection">
                         <div class="section-header">
                             <h3>Preprocessing Components</h3>
-                            <p>v10: Components that run before the main processing logic</p>
+                            <p>v11: Components that run before the main processing logic</p>
                         </div>
                         <div class="canvas-wrapper">
                             <svg id="preprocCanvas" class="component-canvas" width="1200" height="2000">
