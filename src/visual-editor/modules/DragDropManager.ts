@@ -1,33 +1,24 @@
-// Type definitions for the custom window properties
-interface VsCodeApi {
-    postMessage(message: any): void;
-    getState(): any;
-    setState(state: any): void;
-}
-
-interface CustomWindow extends Window {
-    stateManager: any; // Would ideally import the StateManager type
-    renderingManager: any;
-    dragDropManager: DragDropManager;
-    selectionManager: any;
-    componentEditor: any;
-    contextMenuManager: any;
-    keyboardManager: any;
-    vscode?: VsCodeApi;
-    acquireVsCodeApi?: () => VsCodeApi;
-    startDrag?: (e: MouseEvent, component: any, groupElement: Element) => void;
-    startMultiDrag?: (e: MouseEvent, clickedComponent: any) => void;
-}
+import { 
+    VrmComponent, 
+    Position, 
+    DragHandlers,
+    MultiDragHandlers,
+    IDragDropManager,
+    IStateManager,
+    IRenderingManager,
+    VsCodeApi,
+    CustomWindow 
+} from '../../types';
 
 declare const window: CustomWindow;
 
-export class DragDropManager {
+export class DragDropManager implements IDragDropManager {
     
-    public startDrag(e: MouseEvent, component: any, groupElement: Element): void {
+    public startDrag(e: MouseEvent, component: VrmComponent, groupElement: Element): void {
         e.preventDefault();
         e.stopPropagation();
         
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         // Prevent starting a new drag if already dragging
         if (stateManager.getIsDragging()) {
@@ -49,11 +40,11 @@ export class DragDropManager {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        const dragOffset = {
+        const dragOffset: Position = {
             x: mouseX - component.x,
             y: mouseY - component.y
         };
-        const dragStartPos = {
+        const dragStartPos: Position = {
             x: component.x,
             y: component.y
         };
@@ -74,7 +65,8 @@ export class DragDropManager {
         };
         
         // Store handlers for cleanup
-        stateManager.setDragHandlers({ handleDragBound, endDragBound });
+        const dragHandlers: DragHandlers = { handleDragBound, endDragBound };
+        stateManager.setDragHandlers(dragHandlers);
         
         // Add global mouse handlers
         document.addEventListener('mousemove', handleDragBound);
@@ -85,8 +77,8 @@ export class DragDropManager {
         if (details) details.style.display = 'none';
     }
     
-    private handleDrag(e: MouseEvent, dragComponent: any): void {
-        const stateManager = (window as any).stateManager;
+    private handleDrag(e: MouseEvent, dragComponent: VrmComponent): void {
+        const stateManager: IStateManager = window.stateManager;
         
         if (!stateManager.getIsDragging() || !dragComponent) return;
         
@@ -123,14 +115,14 @@ export class DragDropManager {
         dragComponent.y = newY;
         
         // Re-render the section to update visuals
-        const renderingManager = (window as any).renderingManager;
+        const renderingManager: IRenderingManager = window.renderingManager;
         const components = dragComponent.section === 'preproc' ? 
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
         renderingManager.renderComponentSection(components, dragComponent.section + 'Canvas');
     }
     
-    private endDrag(e: MouseEvent, dragComponent: any, groupElement: Element, handleDragBound: any, endDragBound: any): void {
-        const stateManager = (window as any).stateManager;
+    private endDrag(e: MouseEvent, dragComponent: VrmComponent, groupElement: Element, handleDragBound: any, endDragBound: any): void {
+        const stateManager: IStateManager = window.stateManager;
         
         // Check if we're actually dragging - prevent multiple calls
         if (!stateManager.getIsDragging() || !dragComponent) {
@@ -154,14 +146,14 @@ export class DragDropManager {
         
         if (moved) {
             // Get VS Code API safely - avoid multiple acquisitions
-            let vscode = (window as any).vscode;
-            if (!vscode && (window as any).acquireVsCodeApi) {
+            let vscode: VsCodeApi | undefined = window.vscode;
+            if (!vscode && window.acquireVsCodeApi) {
                 try {
-                    vscode = (window as any).acquireVsCodeApi();
-                    (window as any).vscode = vscode; // Store for future use
+                    vscode = window.acquireVsCodeApi();
+                    window.vscode = vscode; // Store for future use
                 } catch (error) {
                     console.warn('VS Code API already acquired, using existing instance');
-                    vscode = (window as any).vscode; // Use existing instance
+                    vscode = window.vscode; // Use existing instance
                 }
             }
             
@@ -188,11 +180,11 @@ export class DragDropManager {
         console.log('Single drag ended successfully');
     }
 
-    public startMultiDrag(e: MouseEvent, clickedComponent: any): void {
+    public startMultiDrag(e: MouseEvent, clickedComponent: VrmComponent): void {
         e.preventDefault();
         e.stopPropagation();
         
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         // Prevent multiple drag operations
         if (stateManager.getIsMultiDragging()) {
@@ -220,7 +212,7 @@ export class DragDropManager {
         
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
             const [section, id] = componentKey.split('-');
-            const component = components.find((c: any) => c.n === parseInt(id));
+            const component = components.find((c: VrmComponent) => c.n === parseInt(id));
             if (component) {
                 stateManager.getMultiDragStartPositions().set(componentKey, { x: component.x, y: component.y });
             }
@@ -229,7 +221,7 @@ export class DragDropManager {
         // Calculate offset from mouse to clicked component
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        const multiDragOffset = {
+        const multiDragOffset: Position = {
             x: mouseX - clickedComponent.x,
             y: mouseY - clickedComponent.y
         };
@@ -260,15 +252,16 @@ export class DragDropManager {
         document.addEventListener('mouseup', endMultiDragBound);
         
         // Store handlers for emergency cleanup
-        stateManager.setMultiDragHandlers({ handleMultiDragBound, endMultiDragBound });
+        const multiDragHandlers: MultiDragHandlers = { handleMultiDragBound, endMultiDragBound };
+        stateManager.setMultiDragHandlers(multiDragHandlers);
         
         // Hide details panel during drag
         const details = document.getElementById('componentDetails');
         if (details) details.style.display = 'none';
     }
     
-    private handleMultiDrag(e: MouseEvent, clickedComponent: any): void {
-        const stateManager = (window as any).stateManager;
+    private handleMultiDrag(e: MouseEvent, clickedComponent: VrmComponent): void {
+        const stateManager: IStateManager = window.stateManager;
         
         if (!stateManager.getIsMultiDragging()) return;
         
@@ -308,7 +301,7 @@ export class DragDropManager {
         // Apply movement to all selected components
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
             const [compSection, compId] = componentKey.split('-');
-            const component = components.find((c: any) => c.n === parseInt(compId));
+            const component = components.find((c: VrmComponent) => c.n === parseInt(compId));
             const startPosition = stateManager.getMultiDragStartPositions().get(componentKey);
             
             if (component && startPosition) {
@@ -330,7 +323,7 @@ export class DragDropManager {
         });
         
         // Re-render the section to update visuals
-        const renderingManager = (window as any).renderingManager;
+        const renderingManager: IRenderingManager = window.renderingManager;
         renderingManager.renderComponentSection(components, section + 'Canvas');
         
         // Restore selection states
@@ -344,7 +337,7 @@ export class DragDropManager {
     }
     
     private endMultiDrag(e: MouseEvent, handleMultiDragBound: any, endMultiDragBound: any): void {
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         if (!stateManager.getIsMultiDragging()) {
             console.log('endMultiDrag called but not multi-dragging, ignoring');
@@ -362,14 +355,14 @@ export class DragDropManager {
         document.removeEventListener('mouseup', endMultiDragBound);
         
         // Get VS Code API safely - avoid multiple acquisitions
-        let vscode = (window as any).vscode;
-        if (!vscode && (window as any).acquireVsCodeApi) {
+        let vscode: VsCodeApi | undefined = window.vscode;
+        if (!vscode && window.acquireVsCodeApi) {
             try {
-                vscode = (window as any).acquireVsCodeApi();
-                (window as any).vscode = vscode; // Store for future use
+                vscode = window.acquireVsCodeApi();
+                window.vscode = vscode; // Store for future use
             } catch (error) {
                 console.warn('VS Code API already acquired, using existing instance');
-                vscode = (window as any).vscode; // Use existing instance
+                vscode = window.vscode; // Use existing instance
             }
         }
         
@@ -379,7 +372,7 @@ export class DragDropManager {
                 const [section, id] = componentKey.split('-');
                 const components = section === 'preproc' ? 
                     stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-                const component = components.find((c: any) => c.n === parseInt(id));
+                const component = components.find((c: VrmComponent) => c.n === parseInt(id));
                 
                 if (component) {
                     vscode.postMessage({

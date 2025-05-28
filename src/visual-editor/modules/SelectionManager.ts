@@ -1,12 +1,26 @@
-export class SelectionManager {
+import { 
+    VrmComponent, 
+    Position, 
+    GridSizes,
+    ISelectionManager,
+    IStateManager,
+    IRenderingManager,
+    IComponentEditor,
+    IContextMenuManager,
+    CustomWindow 
+} from '../../types';
+
+declare const window: CustomWindow;
+
+export class SelectionManager implements ISelectionManager {
     
-    public selectComponentsBelow(point: { x: number, y: number }): void {
-        const stateManager = (window as any).stateManager;
+    public selectComponentsBelow(point: Position): void {
+        const stateManager: IStateManager = window.stateManager;
         const components = stateManager.getActiveTab() === 'preproc' ? 
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-        const selected: any[] = [];
+        const selected: VrmComponent[] = [];
         
-        components.forEach((comp: any) => {
+        components.forEach((comp: VrmComponent) => {
             // Use a small buffer to include components at the exact click point
             if (comp.y >= point.y - 5) {
                 selected.push(comp);
@@ -20,7 +34,7 @@ export class SelectionManager {
             stateManager.setSelectedComponents(selectedSet);
             
             // Re-render to show selection
-            const renderingManager = (window as any).renderingManager;
+            const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = stateManager.getActiveTab() + 'Canvas';
             renderingManager.renderComponentSection(components, canvasId);
             
@@ -32,22 +46,22 @@ export class SelectionManager {
             console.log(`Selected ${selected.length} components below y=${point.y}`);
             
             // Visual feedback
-            const contextMenuManager = (window as any).contextMenuManager;
+            const contextMenuManager: IContextMenuManager = window.contextMenuManager;
             contextMenuManager.showTemporaryMessage(`Selected ${selected.length} components`);
         } else {
             console.log('No components found below the specified point');
-            const contextMenuManager = (window as any).contextMenuManager;
+            const contextMenuManager: IContextMenuManager = window.contextMenuManager;
             contextMenuManager.showTemporaryMessage('No components found below this point');
         }
     }
 
-    public selectComponentsAbove(point: { x: number, y: number }): void {
-        const stateManager = (window as any).stateManager;
+    public selectComponentsAbove(point: Position): void {
+        const stateManager: IStateManager = window.stateManager;
         const components = stateManager.getActiveTab() === 'preproc' ? 
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-        const selected: any[] = [];
+        const selected: VrmComponent[] = [];
         
-        components.forEach((comp: any) => {
+        components.forEach((comp: VrmComponent) => {
             if (comp.y <= point.y) {
                 selected.push(comp);
             }
@@ -59,7 +73,7 @@ export class SelectionManager {
             stateManager.setSelectedComponents(selectedSet);
             
             // Re-render to show selection
-            const renderingManager = (window as any).renderingManager;
+            const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = stateManager.getActiveTab() + 'Canvas';
             renderingManager.renderComponentSection(components, canvasId);
             
@@ -72,14 +86,15 @@ export class SelectionManager {
         }
     }
 
-    public selectComponentsInRow(point: { x: number, y: number }): void {
-        const stateManager = (window as any).stateManager;
+    public selectComponentsInRow(point: Position): void {
+        const stateManager: IStateManager = window.stateManager;
         const components = stateManager.getActiveTab() === 'preproc' ? 
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-        const selected: any[] = [];
-        const tolerance = stateManager.getGridSizes().y; // Allow some tolerance for "same row"
+        const selected: VrmComponent[] = [];
+        const gridSizes: GridSizes = stateManager.getGridSizes();
+        const tolerance = gridSizes.y; // Allow some tolerance for "same row"
         
-        components.forEach((comp: any) => {
+        components.forEach((comp: VrmComponent) => {
             if (Math.abs(comp.y - point.y) <= tolerance) {
                 selected.push(comp);
             }
@@ -91,7 +106,7 @@ export class SelectionManager {
             stateManager.setSelectedComponents(selectedSet);
             
             // Re-render to show selection
-            const renderingManager = (window as any).renderingManager;
+            const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = stateManager.getActiveTab() + 'Canvas';
             renderingManager.renderComponentSection(components, canvasId);
             
@@ -104,14 +119,15 @@ export class SelectionManager {
         }
     }
 
-    public selectComponentsInColumn(point: { x: number, y: number }): void {
-        const stateManager = (window as any).stateManager;
+    public selectComponentsInColumn(point: Position): void {
+        const stateManager: IStateManager = window.stateManager;
         const components = stateManager.getActiveTab() === 'preproc' ? 
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-        const selected: any[] = [];
-        const tolerance = stateManager.getGridSizes().x; // Allow some tolerance for "same column"
+        const selected: VrmComponent[] = [];
+        const gridSizes: GridSizes = stateManager.getGridSizes();
+        const tolerance = gridSizes.x; // Allow some tolerance for "same column"
         
-        components.forEach((comp: any) => {
+        components.forEach((comp: VrmComponent) => {
             if (Math.abs(comp.x - point.x) <= tolerance) {
                 selected.push(comp);
             }
@@ -123,7 +139,7 @@ export class SelectionManager {
             stateManager.setSelectedComponents(selectedSet);
             
             // Re-render to show selection
-            const renderingManager = (window as any).renderingManager;
+            const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = stateManager.getActiveTab() + 'Canvas';
             renderingManager.renderComponentSection(components, canvasId);
             
@@ -139,13 +155,13 @@ export class SelectionManager {
     public selectAllComponents(): void {
         console.log('Select all components triggered');
         this.clearSelection();
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         const components = stateManager.getActiveTab() === 'preproc' ? 
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
         
         console.log('Components to select:', components.length);
         
-        components.forEach((component: any) => {
+        components.forEach((component: VrmComponent) => {
             const componentKey = `${component.section}-${component.n}`;
             stateManager.getSelectedComponents().add(componentKey);
             
@@ -159,22 +175,22 @@ export class SelectionManager {
         console.log('Total selected:', stateManager.getSelectedComponents().size);
         
         if (stateManager.getSelectedComponents().size > 0) {
-            const componentEditor = (window as any).componentEditor;
+            const componentEditor: IComponentEditor = window.componentEditor;
             componentEditor.showMultiSelectionDetails();
         }
     }
 
     public updateSelectionDetails(): void {
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         if (stateManager.getSelectedComponents().size > 0) {
-            const componentEditor = (window as any).componentEditor;
+            const componentEditor: IComponentEditor = window.componentEditor;
             componentEditor.showMultiSelectionDetails();
         }
     }
 
     public clearSelection(): void {
         console.log('Clearing selection...');
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         stateManager.getSelectedComponents().clear();
         document.querySelectorAll('.component-node').forEach(node => {
             node.classList.remove('selected', 'selecting');
@@ -185,7 +201,7 @@ export class SelectionManager {
 
     public restoreSelectionStates(): void {
         // Restore visual selection states after re-rendering
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
             const [section, id] = componentKey.split('-');
             const element = document.querySelector(`[data-component-id="${id}"][data-section="${section}"]`);
@@ -200,15 +216,15 @@ export class SelectionManager {
         console.log('Starting selection...');
         const canvas = e.target as HTMLElement;
         const rect = canvas.getBoundingClientRect();
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         stateManager.setIsSelecting(true);
-        const selectionStart = {
+        const selectionStart: Position = {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
         };
-        stateManager.setSelectionStart?.(selectionStart);
-        stateManager.setSelectionEnd?.(selectionStart);
+        stateManager.setSelectionStart(selectionStart);
+        stateManager.setSelectionEnd(selectionStart);
         
         console.log('Selection start:', selectionStart);
         
@@ -226,7 +242,7 @@ export class SelectionManager {
     }
     
     public updateSelection(e: MouseEvent): void {
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         if (!stateManager.getIsSelecting()) return;
         
         const canvas = document.getElementById(stateManager.getActiveTab() + 'Canvas');
@@ -234,51 +250,51 @@ export class SelectionManager {
         
         const rect = canvas.getBoundingClientRect();
         
-        const selectionEnd = {
+        const selectionEnd: Position = {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
         };
-        stateManager.setSelectionEnd?.(selectionEnd);
+        stateManager.setSelectionEnd(selectionEnd);
         
         this.updateSelectionRect();
         this.highlightComponentsInSelection();
     }
     
     public endSelection(e: MouseEvent): void {
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         if (!stateManager.getIsSelecting()) return;
         
         console.log('Ending selection...');
         
         stateManager.setIsSelecting(false);
-        stateManager.setJustFinishedSelecting?.(true);
+        stateManager.setJustFinishedSelecting(true);
         
         // Finalize selection BEFORE removing selection rectangle
         this.finalizeSelection();
         
         // Remove selection rectangle
-        const selectionRect = stateManager.getSelectionRect?.();
+        const selectionRect = stateManager.getSelectionRect();
         if (selectionRect) {
             selectionRect.remove();
-            stateManager.setSelectionRect?.(null);
+            stateManager.setSelectionRect(null);
         }
         
         console.log('Selected components after finalization:', stateManager.getSelectedComponents());
         
         // Update details panel if components are selected
         if (stateManager.getSelectedComponents().size > 0) {
-            const componentEditor = (window as any).componentEditor;
+            const componentEditor: IComponentEditor = window.componentEditor;
             componentEditor.showMultiSelectionDetails();
         }
         
         // Reset the flag after a short delay to prevent immediate clearing
         setTimeout(() => {
-            stateManager.setJustFinishedSelecting?.(false);
+            stateManager.setJustFinishedSelecting(false);
         }, 50);
     }
     
     private createSelectionRect(canvas: HTMLElement): void {
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         const selectionRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         selectionRect.setAttribute('class', 'selection-rect');
         selectionRect.setAttribute('fill', 'rgba(33, 150, 243, 0.2)');
@@ -286,16 +302,16 @@ export class SelectionManager {
         selectionRect.setAttribute('stroke-width', '1');
         selectionRect.setAttribute('stroke-dasharray', '5,5');
         canvas.appendChild(selectionRect);
-        stateManager.setSelectionRect?.(selectionRect);
+        stateManager.setSelectionRect(selectionRect);
     }
     
     private updateSelectionRect(): void {
-        const stateManager = (window as any).stateManager;
-        const selectionRect = stateManager.getSelectionRect?.();
+        const stateManager: IStateManager = window.stateManager;
+        const selectionRect = stateManager.getSelectionRect();
         if (!selectionRect) return;
         
-        const selectionStart = stateManager.getSelectionStart?.();
-        const selectionEnd = stateManager.getSelectionEnd?.();
+        const selectionStart = stateManager.getSelectionStart();
+        const selectionEnd = stateManager.getSelectionEnd();
         
         const left = Math.min(selectionStart.x, selectionEnd.x);
         const top = Math.min(selectionStart.y, selectionEnd.y);
@@ -309,18 +325,18 @@ export class SelectionManager {
     }
     
     private highlightComponentsInSelection(): void {
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         const components = stateManager.getActiveTab() === 'preproc' ? 
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-        const selectionStart = stateManager.getSelectionStart?.();
-        const selectionEnd = stateManager.getSelectionEnd?.();
+        const selectionStart = stateManager.getSelectionStart();
+        const selectionEnd = stateManager.getSelectionEnd();
         
         const left = Math.min(selectionStart.x, selectionEnd.x);
         const top = Math.min(selectionStart.y, selectionEnd.y);
         const right = Math.max(selectionStart.x, selectionEnd.x);
         const bottom = Math.max(selectionStart.y, selectionEnd.y);
         
-        components.forEach((component: any) => {
+        components.forEach((component: VrmComponent) => {
             const componentInSelection = (
                 component.x >= left &&
                 component.y >= top &&
@@ -344,7 +360,7 @@ export class SelectionManager {
     
     private finalizeSelection(): void {
         console.log('Finalizing selection...');
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         // Find all components that are currently being selected
         const selectingElements = document.querySelectorAll('.selecting');

@@ -1,9 +1,18 @@
-export class KeyboardManager {
+import { 
+    IKeyboardManager,
+    IStateManager,
+    ISelectionManager,
+    CustomWindow 
+} from '../../types';
+
+declare const window: CustomWindow;
+
+export class KeyboardManager implements IKeyboardManager {
     
     public handleKeyDown(e: KeyboardEvent): void {
         console.log('Key pressed:', e.key, 'Ctrl:', e.ctrlKey, 'Meta:', e.metaKey);
         
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         // Delete key - delete selected components
         if (e.key === 'Delete' && stateManager.getSelectedComponents().size > 0) {
@@ -15,7 +24,7 @@ export class KeyboardManager {
         // Escape key - clear selection
         if (e.key === 'Escape') {
             e.preventDefault();
-            const selectionManager = (window as any).selectionManager;
+            const selectionManager: ISelectionManager = window.selectionManager;
             selectionManager.clearSelection();
             console.log('Selection cleared');
         }
@@ -24,7 +33,7 @@ export class KeyboardManager {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
             e.preventDefault();
             console.log('Ctrl+A pressed, selecting all');
-            const selectionManager = (window as any).selectionManager;
+            const selectionManager: ISelectionManager = window.selectionManager;
             selectionManager.selectAllComponents();
         }
     }
@@ -40,10 +49,15 @@ export class KeyboardManager {
     
     public initializeGlobalClickHandler(): void {
         document.addEventListener('click', (e: MouseEvent) => {
-            const stateManager = (window as any).stateManager;
+            const stateManager: IStateManager = window.stateManager;
+
+            // Don't clear selection if shift is held (for connection clearing)
+            if (e.shiftKey) {
+                return;
+            }
             
             // Don't clear selection if we just finished a box selection
-            if (stateManager.getJustFinishedSelecting?.()) {
+            if (stateManager.getJustFinishedSelecting()) {
                 return;
             }
             
@@ -59,7 +73,7 @@ export class KeyboardManager {
                 
                 // Only clear selection if not currently selecting
                 if (!stateManager.getIsSelecting()) {
-                    const selectionManager = (window as any).selectionManager;
+                    const selectionManager: ISelectionManager = window.selectionManager;
                     selectionManager.clearSelection();
                 }
             }

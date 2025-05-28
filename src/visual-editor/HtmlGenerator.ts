@@ -65,6 +65,8 @@ export class HtmlGenerator {
                     </div>
                     <div><kbd>Shift+Click</kbd> - Set primary connection</div>
                     <div><kbd>Shift+Right-click</kbd> - Set secondary connection</div>
+                    <div><kbd>Shift+Click empty</kbd> - Clear primary connection</div>
+                    <div><kbd>Shift+Right-click empty</kbd> - Clear secondary connection</div>
                     <div><kbd>Right-click</kbd> - Remove connections</div>
                 </div>
             </div>

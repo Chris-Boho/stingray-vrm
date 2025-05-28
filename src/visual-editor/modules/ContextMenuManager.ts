@@ -1,10 +1,20 @@
-export class ContextMenuManager {
+import { 
+    Position,
+    IContextMenuManager,
+    IStateManager,
+    ISelectionManager,
+    CustomWindow 
+} from '../../types';
+
+declare const window: CustomWindow;
+
+export class ContextMenuManager implements IContextMenuManager {
     
     public showContextMenu(x: number, y: number): void {
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         // Remove existing context menu if any
-        const existingMenu = stateManager.getContextMenu?.();
+        const existingMenu = stateManager.getContextMenu();
         if (existingMenu) {
             document.body.removeChild(existingMenu);
         }
@@ -31,7 +41,7 @@ export class ContextMenuManager {
             {
                 text: 'Select All Below',
                 action: () => {
-                    const selectionManager = (window as any).selectionManager;
+                    const selectionManager: ISelectionManager = window.selectionManager;
                     selectionManager.selectComponentsBelow(stateManager.getContextMenuPosition());
                     this.closeContextMenu();
                 },
@@ -40,7 +50,7 @@ export class ContextMenuManager {
             {
                 text: 'Select All Above',
                 action: () => {
-                    const selectionManager = (window as any).selectionManager;
+                    const selectionManager: ISelectionManager = window.selectionManager;
                     selectionManager.selectComponentsAbove(stateManager.getContextMenuPosition());
                     this.closeContextMenu();
                 },
@@ -49,7 +59,7 @@ export class ContextMenuManager {
             {
                 text: 'Select All in Row',
                 action: () => {
-                    const selectionManager = (window as any).selectionManager;
+                    const selectionManager: ISelectionManager = window.selectionManager;
                     selectionManager.selectComponentsInRow(stateManager.getContextMenuPosition());
                     this.closeContextMenu();
                 },
@@ -58,7 +68,7 @@ export class ContextMenuManager {
             {
                 text: 'Select All in Column',
                 action: () => {
-                    const selectionManager = (window as any).selectionManager;
+                    const selectionManager: ISelectionManager = window.selectionManager;
                     selectionManager.selectComponentsInColumn(stateManager.getContextMenuPosition());
                     this.closeContextMenu();
                 },
@@ -116,7 +126,7 @@ export class ContextMenuManager {
         document.body.appendChild(contextMenu);
         
         // Store reference to menu
-        stateManager.setContextMenu?.(contextMenu);
+        stateManager.setContextMenu(contextMenu);
         
         // Close menu when clicking outside
         const closeMenu = (e: Event) => {
@@ -133,13 +143,13 @@ export class ContextMenuManager {
     }
 
     public closeContextMenu(): void {
-        const stateManager = (window as any).stateManager;
-        const contextMenu = stateManager.getContextMenu?.();
+        const stateManager: IStateManager = window.stateManager;
+        const contextMenu = stateManager.getContextMenu();
         
         if (contextMenu && contextMenu.parentNode) {
             document.body.removeChild(contextMenu);
         }
-        stateManager.setContextMenu?.(null);
+        stateManager.setContextMenu(null);
         
         // Reset flag when menu is closed, with a small delay to prevent immediate selection clearing
         setTimeout(() => {
@@ -152,10 +162,10 @@ export class ContextMenuManager {
         
         const canvas = e.target as HTMLElement;
         const rect = canvas.getBoundingClientRect();
-        const stateManager = (window as any).stateManager;
+        const stateManager: IStateManager = window.stateManager;
         
         // Store the click position for the context menu
-        const contextMenuPosition = {
+        const contextMenuPosition: Position = {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
         };

@@ -1,35 +1,48 @@
-export class StateManager {
+import { 
+    VrmComponent, 
+    Position, 
+    GridSizes, 
+    DragHandlers,
+    MultiDragHandlers,
+    IStateManager,
+    ISelectionManager,
+    CustomWindow 
+} from '../../types';
+
+declare const window: CustomWindow;
+
+export class StateManager implements IStateManager {
     // Global state variables
     private currentZoom: number = 1;
     private activeTab: string = 'preproc';
-    private preprocComponents: any[] = [];
-    private postprocComponents: any[] = [];
+    private preprocComponents: VrmComponent[] = [];
+    private postprocComponents: VrmComponent[] = [];
     
     // Drag and drop state
     private isDragging: boolean = false;
-    private dragComponent: any = null;
-    private dragOffset = { x: 0, y: 0 };
-    private dragStartPos = { x: 0, y: 0 };
-    private dragHandlers: any = null;
+    private dragComponent: VrmComponent | null = null;
+    private dragOffset: Position = { x: 0, y: 0 };
+    private dragStartPos: Position = { x: 0, y: 0 };
+    private dragHandlers: DragHandlers | null = null;
     
     // Multi-select state
     private isSelecting: boolean = false;
-    private selectionStart = { x: 0, y: 0 };
-    private selectionEnd = { x: 0, y: 0 };
+    private selectionStart: Position = { x: 0, y: 0 };
+    private selectionEnd: Position = { x: 0, y: 0 };
     private selectedComponents: Set<string> = new Set();
-    private selectionRect: any = null;
+    private selectionRect: SVGElement | null = null;
     private justFinishedSelecting: boolean = false;
     
     // Multi-drag state
     private isMultiDragging: boolean = false;
-    private multiDragStartPositions: Map<string, any> = new Map();
-    private multiDragOffset = { x: 0, y: 0 };
-    private multiDragReferenceComponent: any = null;
-    private multiDragHandlers: any = null;
+    private multiDragStartPositions: Map<string, Position> = new Map();
+    private multiDragOffset: Position = { x: 0, y: 0 };
+    private multiDragReferenceComponent: VrmComponent | null = null;
+    private multiDragHandlers: MultiDragHandlers | null = null;
     
     // Context menu state
-    private contextMenu: any = null;
-    private contextMenuPosition = { x: 0, y: 0 };
+    private contextMenu: HTMLElement | null = null;
+    private contextMenuPosition: Position = { x: 0, y: 0 };
     private isContextMenuOpen: boolean = false;
     
     // Grid settings
@@ -41,58 +54,58 @@ export class StateManager {
     // =================================================================
     public getCurrentZoom(): number { return this.currentZoom; }
     public getActiveTab(): string { return this.activeTab; }
-    public getPreprocComponents(): any[] { return this.preprocComponents; }
-    public getPostprocComponents(): any[] { return this.postprocComponents; }
+    public getPreprocComponents(): VrmComponent[] { return this.preprocComponents; }
+    public getPostprocComponents(): VrmComponent[] { return this.postprocComponents; }
     public getSelectedComponents(): Set<string> { return this.selectedComponents; }
     public getIsDragging(): boolean { return this.isDragging; }
     public getIsSelecting(): boolean { return this.isSelecting; }
     public getIsContextMenuOpen(): boolean { return this.isContextMenuOpen; }
-    public getContextMenuPosition(): any { return this.contextMenuPosition; }
-    public getGridSizes(): { x: number, y: number } { return { x: this.GRID_SIZE_X, y: this.GRID_SIZE_Y }; }
-    public getDragComponent(): any { return this.dragComponent; }
-    public getDragOffset(): any { return this.dragOffset; }
-    public getDragStartPos(): any { return this.dragStartPos; }
-    public getDragHandlers(): any { return this.dragHandlers; }
-    public getSelectionStart(): any { return this.selectionStart; }
-    public getSelectionEnd(): any { return this.selectionEnd; }
-    public getSelectionRect(): any { return this.selectionRect; }
+    public getContextMenuPosition(): Position { return this.contextMenuPosition; }
+    public getGridSizes(): GridSizes { return { x: this.GRID_SIZE_X, y: this.GRID_SIZE_Y }; }
+    public getDragComponent(): VrmComponent | null { return this.dragComponent; }
+    public getDragOffset(): Position { return this.dragOffset; }
+    public getDragStartPos(): Position { return this.dragStartPos; }
+    public getDragHandlers(): DragHandlers | null { return this.dragHandlers; }
+    public getSelectionStart(): Position { return this.selectionStart; }
+    public getSelectionEnd(): Position { return this.selectionEnd; }
+    public getSelectionRect(): SVGElement | null { return this.selectionRect; }
     public getJustFinishedSelecting(): boolean { return this.justFinishedSelecting; }
     public getIsMultiDragging(): boolean { return this.isMultiDragging; }
-    public getMultiDragStartPositions(): Map<string, any> { return this.multiDragStartPositions; }
-    public getMultiDragOffset(): any { return this.multiDragOffset; }
-    public getMultiDragReferenceComponent(): any { return this.multiDragReferenceComponent; }
-    public getMultiDragHandlers(): any { return this.multiDragHandlers; }
-    public getContextMenu(): any { return this.contextMenu; }
+    public getMultiDragStartPositions(): Map<string, Position> { return this.multiDragStartPositions; }
+    public getMultiDragOffset(): Position { return this.multiDragOffset; }
+    public getMultiDragReferenceComponent(): VrmComponent | null { return this.multiDragReferenceComponent; }
+    public getMultiDragHandlers(): MultiDragHandlers | null { return this.multiDragHandlers; }
+    public getContextMenu(): HTMLElement | null { return this.contextMenu; }
     
     // =================================================================
     // SETTERS - Allow other classes to modify state
     // =================================================================
     public setActiveTab(tab: string): void { this.activeTab = tab; }
-    public setPreprocComponents(components: any[]): void { this.preprocComponents = components; }
-    public setPostprocComponents(components: any[]): void { this.postprocComponents = components; }
+    public setPreprocComponents(components: VrmComponent[]): void { this.preprocComponents = components; }
+    public setPostprocComponents(components: VrmComponent[]): void { this.postprocComponents = components; }
     public setSelectedComponents(components: Set<string>): void { this.selectedComponents = components; }
     public setIsDragging(dragging: boolean): void { this.isDragging = dragging; }
     public setIsSelecting(selecting: boolean): void { this.isSelecting = selecting; }
     public setIsContextMenuOpen(open: boolean): void { this.isContextMenuOpen = open; }
-    public setContextMenuPosition(pos: any): void { this.contextMenuPosition = pos; }
-    public setDragComponent(component: any): void { this.dragComponent = component; }
-    public setDragOffset(offset: any): void { this.dragOffset = offset; }
-    public setDragStartPos(pos: any): void { this.dragStartPos = pos; }
-    public setDragHandlers(handlers: any): void { this.dragHandlers = handlers; }
-    public setSelectionStart(start: any): void { this.selectionStart = start; }
-    public setSelectionEnd(end: any): void { this.selectionEnd = end; }
-    public setSelectionRect(rect: any): void { this.selectionRect = rect; }
+    public setContextMenuPosition(pos: Position): void { this.contextMenuPosition = pos; }
+    public setDragComponent(component: VrmComponent | null): void { this.dragComponent = component; }
+    public setDragOffset(offset: Position): void { this.dragOffset = offset; }
+    public setDragStartPos(pos: Position): void { this.dragStartPos = pos; }
+    public setDragHandlers(handlers: DragHandlers | null): void { this.dragHandlers = handlers; }
+    public setSelectionStart(start: Position): void { this.selectionStart = start; }
+    public setSelectionEnd(end: Position): void { this.selectionEnd = end; }
+    public setSelectionRect(rect: SVGElement | null): void { this.selectionRect = rect; }
     public setJustFinishedSelecting(finished: boolean): void { this.justFinishedSelecting = finished; }
     public setIsMultiDragging(dragging: boolean): void { this.isMultiDragging = dragging; }
-    public setMultiDragOffset(offset: any): void { this.multiDragOffset = offset; }
-    public setMultiDragReferenceComponent(component: any): void { this.multiDragReferenceComponent = component; }
-    public setMultiDragHandlers(handlers: any): void { this.multiDragHandlers = handlers; }
-    public setContextMenu(menu: any): void { this.contextMenu = menu; }
+    public setMultiDragOffset(offset: Position): void { this.multiDragOffset = offset; }
+    public setMultiDragReferenceComponent(component: VrmComponent | null): void { this.multiDragReferenceComponent = component; }
+    public setMultiDragHandlers(handlers: MultiDragHandlers | null): void { this.multiDragHandlers = handlers; }
+    public setContextMenu(menu: HTMLElement | null): void { this.contextMenu = menu; }
     
     // =================================================================
     // UTILITY FUNCTIONS
     // =================================================================
-    public snapToGrid(x: number, y: number): { x: number, y: number } {
+    public snapToGrid(x: number, y: number): Position {
         return {
             x: Math.round(x / this.GRID_SIZE_X) * this.GRID_SIZE_X,
             y: Math.round(y / this.GRID_SIZE_Y) * this.GRID_SIZE_Y
@@ -134,9 +147,10 @@ export class StateManager {
         const details = document.getElementById('componentDetails');
         if (details) details.style.display = 'none';
         
-        // Clear selection when switching tabs - call through window reference
-        if ((window as any).selectionManager) {
-            (window as any).selectionManager.clearSelection();
+        // Clear selection when switching tabs
+        const selectionManager: ISelectionManager = window.selectionManager;
+        if (selectionManager) {
+            selectionManager.clearSelection();
         }
     }
     

@@ -21,12 +21,22 @@ src/
 ├── VrmDocument.ts           # Document wrapper and operations
 ├── VrmParser.ts             # XML parsing and manipulation
 ├── VrmVisualEditor.ts       # Visual programming interface
+├── types.ts                 # TypeScript interface definitions
 └── visual-editor/
     ├── ComponentParser.ts    # Parses VRM components from XML
     ├── ComponentXmlGenerator.ts # Generates XML from components
     ├── EditorScripts.ts     # JavaScript functionality for editor
     ├── HtmlGenerator.ts      # Generates HTML for visual editor
     ├── VrmComponent.ts       # Component interface definitions
+    ├── modules/             # Manager classes for editor functionality
+    │   ├── StateManager.ts      # Global state management
+    │   ├── SelectionManager.ts  # Component selection handling
+    │   ├── DragDropManager.ts   # Drag and drop operations
+    │   ├── RenderingManager.ts  # Component rendering and display
+    │   ├── ComponentEditor.ts   # Component editing dialogs
+    │   ├── ContextMenuManager.ts # Right-click context menus
+    │   ├── KeyboardManager.ts   # Keyboard shortcuts
+    │   └── ConnectionManager.ts # Component connection manipulation
     └── styles/              # CSS styles for editor UI
 ```
 
@@ -91,6 +101,92 @@ src/
   - Implements drag-and-drop component repositioning
   - Advanced connection routing with multiple algorithms
 
+### types.ts
+
+- **Purpose**: Centralized TypeScript type definitions
+- **Key Interfaces**:
+  - `VrmComponent` - Component data structure
+  - `IStateManager` - State management interface
+  - `ISelectionManager` - Selection handling interface
+  - `IDragDropManager` - Drag and drop interface
+  - `IRenderingManager` - Rendering interface
+  - `IConnectionManager` - Connection manipulation interface
+  - `CustomWindow` - Extended window object with manager references
+  - Handler types for proper event management
+
+### Manager Classes (src/visual-editor/modules/)
+
+#### StateManager.ts
+- **Purpose**: Central state management for the visual editor
+- **Responsibilities**:
+  - Component data storage (preproc/postproc)
+  - Selection state tracking
+  - Drag and drop state management
+  - Zoom and tab state
+  - Grid snapping utilities
+  - Component color mapping
+
+#### SelectionManager.ts
+- **Purpose**: Handles component selection operations
+- **Features**:
+  - Single and multi-component selection
+  - Box selection with drag rectangle
+  - Contextual selection (above/below/row/column)
+  - Selection state restoration after re-rendering
+  - Keyboard shortcuts (Ctrl+A, Escape)
+
+#### DragDropManager.ts
+- **Purpose**: Manages drag and drop operations
+- **Features**:
+  - Single component dragging with grid snapping
+  - Multi-component dragging with relative positioning
+  - Canvas boundary enforcement
+  - Real-time position updates
+  - Proper event handler cleanup
+
+#### RenderingManager.ts
+- **Purpose**: Handles component and connection visualization
+- **Features**:
+  - SVG-based component rendering
+  - Advanced connection routing algorithms
+  - Visual feedback for selections and interactions
+  - Canvas event handling
+  - Connection visualization with arrows
+
+#### ComponentEditor.ts
+- **Purpose**: Component property editing interface
+- **Features**:
+  - Modal dialogs for component editing
+  - Component details panel
+  - Parameter management for SQL queries
+  - Connection information display
+  - Multi-selection details
+
+#### ContextMenuManager.ts
+- **Purpose**: Right-click context menu functionality
+- **Features**:
+  - Selection operations (above/below/row/column)
+  - Temporary notification messages
+  - Menu positioning and styling
+  - Outside-click menu closing
+
+#### KeyboardManager.ts
+- **Purpose**: Keyboard shortcut handling
+- **Features**:
+  - Global keyboard event management
+  - Selection shortcuts (Ctrl+A, Escape)
+  - Click-outside selection clearing
+  - Drag prevention on canvas elements
+
+#### ConnectionManager.ts
+- **Purpose**: Component connection manipulation
+- **Features**:
+  - Primary and secondary connection creation
+  - Connection validation (same section, no self-connection)
+  - Connection clearing on empty space
+  - Visual feedback for connection operations
+  - Connection removal interface
+
 #### Component Structure
 
 Each workflow component has:
@@ -127,8 +223,17 @@ Each workflow component has:
 3. **Drag components** to reposition them with grid snapping
 4. **Click components** → View details in side panel with visual selection
 5. **Double-click components** → Open full editor modal
-6. **Edit properties** → Component type, SQL queries, parameters, conditions
+6. **Edit properties** → Component type, SQL queries, parameters, conditions, connections
 7. **Save changes** → Updates written back to VRM XML with real-time position updates
+
+### Connection Management
+
+1. **Select a component** by clicking on it
+2. **Create primary connection** → Shift+Click target component
+3. **Create secondary connection** → Shift+Right-click target component
+4. **Clear primary connection** → Shift+Click empty space
+5. **Clear secondary connection** → Shift+Right-click empty space
+6. **Remove connections** → Right-click component → Select connection to remove
 
 ## Key Features
 
@@ -167,6 +272,15 @@ Each workflow component has:
 - **Grid snapping**: Components snap to 32x26px grid for alignment
 - **Real-time updates**: Position changes immediately saved to VRM file
 
+#### Advanced Connection Management
+
+- **Dual connections**: Each component supports primary and secondary connections
+- **Visual distinction**: Primary connections (blue), secondary connections (gray)
+- **Interactive creation**: Shift+click for primary, shift+right-click for secondary
+- **Connection clearing**: Shift+click/right-click on empty space to clear connections
+- **Validation**: Prevents self-connections and cross-section connections
+- **Connection menu**: Right-click components to manage existing connections
+
 #### Advanced Connection Routing
 
 - **Multi-segment orthogonal routing**: Professional step-wise connections
@@ -176,6 +290,7 @@ Each workflow component has:
 - **Connection types**: Primary (blue) and secondary (gray) connections
 - **3px line thickness**: Enhanced visibility
 - **15px vertical buffers**: Clean entry/exit from components
+- **Arrow indicators**: Direction arrows on connection lines
 
 #### Canvas Features
 
@@ -184,6 +299,16 @@ Each workflow component has:
 - **Zoom controls**: Zoom in/out/reset functionality
 - **Custom scrollbars**: Styled to match VSCode theme
 - **Component details panel**: Floating panel showing selected component info
+- **Multi-selection support**: Select and manipulate multiple components
+
+#### Selection System
+
+- **Single selection**: Click components for individual selection
+- **Multi-selection**: Ctrl+click to add/remove from selection
+- **Box selection**: Click and drag on empty space to select multiple components
+- **Contextual selection**: Right-click for advanced selection options (above/below/row/column)
+- **Keyboard shortcuts**: Ctrl+A (select all), Escape (clear selection)
+- **Visual feedback**: Selected components highlighted with outline
 
 ### Language Support
 
@@ -191,6 +316,7 @@ Each workflow component has:
 - **JavaScript**: Complete language features, error checking
 - **SQL**: Within component editors for database queries
 - **XML**: Underlying VRM structure maintained
+- **TypeScript**: Full type safety throughout the codebase
 
 ## Configuration
 
@@ -212,6 +338,16 @@ Each workflow component has:
 - **Webview-based UI**: HTML/CSS/JS interface for visual components
 - **Virtual documents**: Temporary files for HTML/JS editing
 - **XML manipulation**: Preserves structure while allowing targeted updates
+- **Modular design**: Separate manager classes for different responsibilities
+- **Type-safe**: Full TypeScript typing throughout the codebase
+
+### TypeScript Type System
+
+- **Centralized types**: All interfaces defined in `types.ts`
+- **Interface-based design**: Clear contracts between modules
+- **Generic type safety**: Proper typing for event handlers and callbacks
+- **No `any` types**: Full type coverage for compile-time error checking
+- **Custom Window typing**: Extended window object with manager references
 
 ### Grid System
 
@@ -272,6 +408,7 @@ Each workflow component has:
 - User preference handling
 - Drag-and-drop state management
 - Grid snapping calculations
+- Connection state tracking
 
 ### Error Handling
 
@@ -280,8 +417,45 @@ Each workflow component has:
 - Component validation and user feedback
 - Graceful degradation for malformed content
 - Cleanup error handling to prevent orphaned files
+- Type-safe error boundaries
 
 ## Recent Enhancements
+
+### Version 3.0 Features
+
+#### TypeScript Migration
+
+- **Full type safety**: Complete TypeScript conversion with proper interfaces
+- **Centralized types**: All type definitions in `types.ts`
+- **Interface contracts**: Clear contracts between all modules
+- **No `any` types**: Eliminated all `any` usage for full type coverage
+- **Compile-time checking**: Catch errors during development, not runtime
+
+#### Modular Architecture
+
+- **Manager classes**: Separated functionality into focused manager classes
+- **Single responsibility**: Each manager handles one aspect of the editor
+- **Clean interfaces**: Well-defined APIs between modules
+- **Testable design**: Isolated components for easier testing
+- **Maintainable code**: Clear separation of concerns
+
+#### Advanced Connection System
+
+- **Interactive connection creation**: Shift+click and shift+right-click for connections
+- **Connection validation**: Prevents invalid connections (self, cross-section)
+- **Connection clearing**: Shift+click on empty space to clear connections
+- **Visual connection management**: Right-click menus for connection operations
+- **Dual connection support**: Primary and secondary connections per component
+- **Connection persistence**: Connections saved to VRM XML immediately
+
+#### Enhanced User Experience
+
+- **Improved feedback**: Better visual and textual feedback for all operations
+- **Keyboard shortcuts**: Comprehensive keyboard shortcut system
+- **Context menus**: Right-click menus for advanced operations
+- **Selection system**: Advanced multi-selection with various selection modes
+- **Drag and drop**: Smooth single and multi-component dragging
+- **Grid snapping**: Precise component alignment with visual grid
 
 ### Version 2.0 Features
 
@@ -307,6 +481,31 @@ Each workflow component has:
 - **Professional routing**: Step-wise connections with proper spacing
 - **Responsive interface**: Real-time updates and visual feedback
 
+## Keyboard Shortcuts
+
+### General
+- **Ctrl+A**: Select all components in current tab
+- **Escape**: Clear selection
+- **Delete**: Delete selected components (coming soon)
+
+### Selection
+- **Click**: Select single component
+- **Ctrl+Click**: Add/remove component from selection
+- **Click+Drag on empty space**: Box selection
+- **Right-click**: Context menu with selection options
+
+### Connections
+- **Shift+Click component**: Set primary connection from selected component
+- **Shift+Right-click component**: Set secondary connection from selected component
+- **Shift+Click empty space**: Clear primary connection from selected component
+- **Shift+Right-click empty space**: Clear secondary connection from selected component
+- **Right-click component**: Show connection management menu
+
+### Editing
+- **Double-click component**: Open component editor
+- **Drag component**: Move component (with grid snapping)
+- **Drag selected components**: Move all selected components together
+
 ## Future Enhancements
 
 ### Potential Features
@@ -317,8 +516,10 @@ Each workflow component has:
 - **Theme support**: Custom color schemes for components
 - **Debugging**: Workflow execution visualization
 - **Version control**: Better diff/merge support for VRM files
-- **Connection arrowheads**: Visual flow direction indicators
 - **Undo/Redo**: Component position and property change history
+- **Component deletion**: Delete key support for removing components
+- **Component duplication**: Copy and paste components
+- **Workflow validation**: Check for unreachable components and circular references
 
 ### Performance Optimizations
 
@@ -327,3 +528,4 @@ Each workflow component has:
 - **Caching**: Component metadata caching
 - **Virtual scrolling**: Handle large workflows efficiently
 - **Connection optimization**: Reduce rendering overhead for complex workflows
+- **Batch operations**: Group multiple component updates for efficiency

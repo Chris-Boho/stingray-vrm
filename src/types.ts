@@ -38,6 +38,17 @@ export interface Position {
     y: number;
 }
 
+// Handler types for drag operations
+export interface DragHandlers {
+    handleDragBound: (event: MouseEvent) => void;
+    endDragBound: (event: MouseEvent) => void;
+}
+
+export interface MultiDragHandlers {
+    handleMultiDragBound: (event: MouseEvent) => void;
+    endMultiDragBound: (event: MouseEvent) => void;
+}
+
 export interface GridSizes {
     x: number;
     y: number;
@@ -59,6 +70,7 @@ export interface IStateManager {
     getDragComponent(): VrmComponent | null;
     getDragOffset(): Position;
     getDragStartPos(): Position;
+    getDragHandlers(): DragHandlers | null;
     getSelectionStart(): Position;
     getSelectionEnd(): Position;
     getSelectionRect(): SVGElement | null;
@@ -66,6 +78,8 @@ export interface IStateManager {
     getIsMultiDragging(): boolean;
     getMultiDragStartPositions(): Map<string, Position>;
     getMultiDragOffset(): Position;
+    getMultiDragReferenceComponent(): VrmComponent | null;
+    getMultiDragHandlers(): MultiDragHandlers | null;
     getContextMenu(): HTMLElement | null;
 
     // Setters
@@ -80,12 +94,15 @@ export interface IStateManager {
     setDragComponent(component: VrmComponent | null): void;
     setDragOffset(offset: Position): void;
     setDragStartPos(pos: Position): void;
+    setDragHandlers(handlers: DragHandlers | null): void;
     setSelectionStart(start: Position): void;
     setSelectionEnd(end: Position): void;
     setSelectionRect(rect: SVGElement | null): void;
     setJustFinishedSelecting(finished: boolean): void;
     setIsMultiDragging(dragging: boolean): void;
     setMultiDragOffset(offset: Position): void;
+    setMultiDragReferenceComponent(component: VrmComponent | null): void;
+    setMultiDragHandlers(handlers: MultiDragHandlers | null): void;
     setContextMenu(menu: HTMLElement | null): void;
 
     // Utility methods
@@ -151,6 +168,7 @@ export interface IContextMenuManager {
 export interface IConnectionManager {
     handleShiftClick(e: MouseEvent, targetComponent: VrmComponent): void;
     handleShiftRightClick(e: MouseEvent, targetComponent: VrmComponent): void;
+    handleShiftClickOnEmpty(e: MouseEvent, connectionType: 'primary' | 'secondary'): void;
     showConnectionMenu(component: VrmComponent, x: number, y: number): void;
 }
 
@@ -193,6 +211,7 @@ export interface CustomWindow extends Window {
     showTemporaryMessage?: (message: string) => void;
     handleShiftClick?: (e: MouseEvent, targetComponent: VrmComponent) => void;
     handleShiftRightClick?: (e: MouseEvent, targetComponent: VrmComponent) => void;
+    handleShiftClickOnEmpty?: (e: MouseEvent, connectionType: 'primary' | 'secondary') => void;
     showConnectionMenu?: (component: VrmComponent, x: number, y: number) => void;
     closeComponentEditor?: () => void;
     addParameter?: () => void;

@@ -84,6 +84,8 @@ export class ComponentEditor {
                 <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 5px;"><strong>Connection Controls:</strong></div>
                 <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Shift+Click</kbd> another component: Set primary connection</div>
                 <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Shift+Right-click</kbd> another component: Set secondary connection</div>
+                <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Shift+Click</kbd> empty space: Clear primary connection</div>
+                <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Shift+Right-click</kbd> empty space: Clear secondary connection</div>
                 <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Right-click</kbd> this component: Remove connections</div>
             </div>
             <div style="margin-top: 10px;"><small>Double-click component to edit</small></div>

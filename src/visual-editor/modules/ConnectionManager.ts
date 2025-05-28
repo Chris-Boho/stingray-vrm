@@ -103,6 +103,41 @@ export class ConnectionManager {
         this.showMessage(`Secondary connection: ${sourceComponent.n} → ${targetComponent.n}`);
     }
     
+    public handleShiftClickOnEmpty(e: MouseEvent, connectionType: 'primary' | 'secondary'): void {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const stateManager: IStateManager = window.stateManager;
+        
+        // Check if exactly one component is selected
+        if (stateManager.getSelectedComponents().size !== 1) {
+            this.showMessage('Please select exactly one component first before clearing connections.');
+            return;
+        }
+        
+        // Get the selected component
+        const selectedComponentKeys = Array.from(stateManager.getSelectedComponents());
+        const selectedComponentKey = selectedComponentKeys[0] as string;
+        const [sourceSection, sourceId] = selectedComponentKey.split('-');
+        
+        // Find the source component
+        const sourceComponents = sourceSection === 'preproc' ? 
+            stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+        const sourceComponent = sourceComponents.find((c: VrmComponent) => c.n === parseInt(sourceId));
+        
+        if (!sourceComponent) {
+            this.showMessage('Source component not found.');
+            return;
+        }
+        
+        // Clear the appropriate connection
+        this.removeConnection(sourceComponent, connectionType);
+        
+        const connectionTypeName = connectionType === 'primary' ? 'Primary' : 'Secondary';
+        console.log(`Cleared ${connectionType} connection from component ${sourceComponent.n}`);
+        this.showMessage(`${connectionTypeName} connection cleared from component ${sourceComponent.n}`);
+    }
+    
     private updateConnection(sourceComponent: VrmComponent, targetId: number, connectionType: 'primary' | 'secondary'): void {
         // Ensure the component has a j array
         if (!sourceComponent.j) {
@@ -333,6 +368,7 @@ export class ConnectionManager {
             // Make functions globally available
             window.handleShiftClick = (e, targetComponent) => window.connectionManager.handleShiftClick(e, targetComponent);
             window.handleShiftRightClick = (e, targetComponent) => window.connectionManager.handleShiftRightClick(e, targetComponent);
+            window.handleShiftClickOnEmpty = (e, connectionType) => window.connectionManager.handleShiftClickOnEmpty(e, connectionType);
             window.showConnectionMenu = (component, x, y) => window.connectionManager.showConnectionMenu(component, x, y);
         `;
     }
