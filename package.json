@@ -1,97 +1,102 @@
 {
-  "name": "stingray-vrm",
-  "displayName": "stingray-vrm",
-  "description": "Read and handle stingray vrm files",
-  "version": "0.0.1",
-  "engines": {
-    "vscode": "^1.100.0"
-  },
-  "categories": [
-    "Other"
-  ],
-  "activationEvents": [
-  ],
-  "main": "./out/extension.js",
-  "contributes": {
-    "languages": [
-      {
-        "id": "vrm",
-        "aliases": ["VRM", "vrm"],
-        "extensions": [".vrm"],
-        "configuration": "./language-configuration.json"
-      }
-    ],
-    "customEditors": [
-      {
-        "viewType": "vrmEditor.vrm",
-        "displayName": "VRM Editor",
-        "selector": [
-          {
-            "filenamePattern": "*.vrm"
-          }
-        ],
-        "priority": "default"
-      }
-    ],
-    "configuration": {
-      "title": "VRM Editor",
-      "properties": {
-        "vrmEditor.autoSave": {
-          "type": "boolean",
-          "default": false,
-          "description": "Automatically save changes to VRM file after a delay"
-        },
-        "vrmEditor.autoSaveDelay": {
-          "type": "number",
-          "default": 500,
-          "description": "Delay in milliseconds before auto-saving changes"
-        }
-      }
-    },
-    "commands": [
-      {
-        "command": "vrmEditor.openHtml",
-        "title": "Open HTML",
-        "category": "VRM"
-      },
-      {
-        "command": "vrmEditor.openJs",
-        "title": "Open JavaScript",
-        "category": "VRM"
-      },
-      {
-        "command": "vrmEditor.openVrmEditor",
-        "title": "Open VRM Editor",
-        "category": "VRM"
-      }
-    ],
-    "menus": {
-      "explorer/context": [
-        {
-          "when": "resourceExtname == .vrm",
-          "command": "vrmEditor.openVrmEditor",
-          "group": "navigation"
-        }
-      ]
-    }
-  },
-  "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
-  },
-  "devDependencies": {
-    "@types/vscode": "^1.100.0",
-    "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
-    "@typescript-eslint/eslint-plugin": "^8.31.1",
-    "@typescript-eslint/parser": "^8.31.1",
-    "eslint": "^9.25.1",
-    "typescript": "^5.8.3",
-    "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.5.2"
-  }
+	"name": "stingray-vrm",
+	"displayName": "stingray-vrm",
+	"publisher": "ChrisEnterprise",
+	"description": "Read and handle stingray vrm files",
+	"version": "0.0.2",
+	"engines": {
+		"vscode": "^0.900.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [],
+	"main": "./out/extension.js",
+	"contributes": {
+		"languages": [
+			{
+				"id": "vrm",
+				"aliases": [
+					"VRM",
+					"vrm"
+				],
+				"extensions": [
+					".vrm"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"customEditors": [
+			{
+				"viewType": "vrmEditor.vrm",
+				"displayName": "VRM Editor",
+				"selector": [
+					{
+						"filenamePattern": "*.vrm"
+					}
+				],
+				"priority": "default"
+			}
+		],
+		"configuration": {
+			"title": "VRM Editor",
+			"properties": {
+				"vrmEditor.autoSave": {
+					"type": "boolean",
+					"default": false,
+					"description": "Automatically save changes to VRM file after a delay"
+				},
+				"vrmEditor.autoSaveDelay": {
+					"type": "number",
+					"default": 500,
+					"description": "Delay in milliseconds before auto-saving changes"
+				}
+			}
+		},
+		"commands": [
+			{
+				"command": "vrmEditor.openHtml",
+				"title": "Open HTML",
+				"category": "VRM"
+			},
+			{
+				"command": "vrmEditor.openJs",
+				"title": "Open JavaScript",
+				"category": "VRM"
+			},
+			{
+				"command": "vrmEditor.openVrmEditor",
+				"title": "Open VRM Editor",
+				"category": "VRM"
+			}
+		],
+		"menus": {
+			"explorer/context": [
+				{
+					"when": "resourceExtname == .vrm",
+					"command": "vrmEditor.openVrmEditor",
+					"group": "navigation"
+				}
+			]
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"pretest": "npm run compile && npm run lint",
+		"lint": "eslint src",
+		"test": "vscode-test"
+	},
+	"devDependencies": {
+		"@types/vscode": "^0.900.0",
+		"@types/mocha": "^10.0.10",
+		"@types/node": "20.x",
+		"@typescript-eslint/eslint-plugin": "^8.31.1",
+		"@typescript-eslint/parser": "^8.31.1",
+		"eslint": "^9.25.1",
+		"typescript": "^5.8.3",
+		"@vscode/test-cli": "^0.0.10",
+		"@vscode/test-electron": "^2.5.2"
+	}
 }

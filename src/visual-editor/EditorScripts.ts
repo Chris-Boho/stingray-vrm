@@ -5,6 +5,7 @@ import { DragDropManager } from './modules/DragDropManager';
 import { RenderingManager } from './modules/RenderingManager';
 import { ComponentEditor } from './modules/ComponentEditor';
 import { KeyboardManager } from './modules/KeyboardManager';
+import { ConnectionManager } from './modules/ConnectionManager';
 
 export function getEditorScripts(): string {
     return `
@@ -25,6 +26,8 @@ export function getEditorScripts(): string {
         ${ComponentEditor.inject()}
         
         ${KeyboardManager.inject()}
+        
+        ${ConnectionManager.inject()}
         
         // =================================================================
         // Initialization

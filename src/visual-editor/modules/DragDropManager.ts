@@ -1,3 +1,26 @@
+// Type definitions for the custom window properties
+interface VsCodeApi {
+    postMessage(message: any): void;
+    getState(): any;
+    setState(state: any): void;
+}
+
+interface CustomWindow extends Window {
+    stateManager: any; // Would ideally import the StateManager type
+    renderingManager: any;
+    dragDropManager: DragDropManager;
+    selectionManager: any;
+    componentEditor: any;
+    contextMenuManager: any;
+    keyboardManager: any;
+    vscode?: VsCodeApi;
+    acquireVsCodeApi?: () => VsCodeApi;
+    startDrag?: (e: MouseEvent, component: any, groupElement: Element) => void;
+    startMultiDrag?: (e: MouseEvent, clickedComponent: any) => void;
+}
+
+declare const window: CustomWindow;
+
 export class DragDropManager {
     
     public startDrag(e: MouseEvent, component: any, groupElement: Element): void {

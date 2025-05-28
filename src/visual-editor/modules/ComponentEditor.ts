@@ -1,3 +1,18 @@
+// Type definitions for proper typing
+interface CustomWindow extends Window {
+    stateManager: any;
+    componentEditor: ComponentEditor;
+    vscode?: any;
+    acquireVsCodeApi?: () => any;
+    currentEditingComponent?: any;
+    closeComponentEditor?: () => void;
+    addParameter?: () => void;
+    removeParameter?: (index: number) => void;
+    saveComponentChanges?: (componentId: number) => void;
+}
+
+declare const window: CustomWindow;
+
 export class ComponentEditor {
     
     public showComponentDetails(component: any): void {
@@ -31,9 +46,20 @@ export class ComponentEditor {
                 <span class="detail-label">Watchpoint:</span>
                 <span class="detail-value">${component.wp ? 'Yes' : 'No'}</span>
             </div>
+        `;
+        
+        // Enhanced connection display
+        const primaryConnection = component.j && component.j[0] ? component.j[0] : 'None';
+        const secondaryConnection = component.j && component.j[1] ? component.j[1] : 'None';
+        
+        html += `
             <div class="detail-row">
-                <span class="detail-label">Connections:</span>
-                <span class="detail-value">${component.j.filter((j: number) => j > 0).join(', ') || 'None'}</span>
+                <span class="detail-label">Primary Connection:</span>
+                <span class="detail-value" style="color: #4FC3F7;">${primaryConnection}</span>
+            </div>
+            <div class="detail-row">
+                <span class="detail-label">Secondary Connection:</span>
+                <span class="detail-value" style="color: #666;">${secondaryConnection}</span>
             </div>
         `;
         
@@ -53,7 +79,15 @@ export class ComponentEditor {
             }
         }
         
-        html += '<div style="margin-top: 10px;"><small>Double-click component to edit</small></div>';
+        html += `
+            <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border);">
+                <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 5px;"><strong>Connection Controls:</strong></div>
+                <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Shift+Click</kbd> another component: Set primary connection</div>
+                <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Shift+Right-click</kbd> another component: Set secondary connection</div>
+                <div style="font-size: 10px; color: var(--vscode-descriptionForeground);">• <kbd>Right-click</kbd> this component: Remove connections</div>
+            </div>
+            <div style="margin-top: 10px;"><small>Double-click component to edit</small></div>
+        `;
         
         detailsContent.innerHTML = html;
         detailsPanel.style.display = 'block';
@@ -65,7 +99,7 @@ export class ComponentEditor {
         
         if (!detailsPanel || !detailsContent) return;
         
-        const stateManager = (window as any).stateManager;
+        const stateManager = window.stateManager;
         const count = stateManager.getSelectedComponents().size;
         let html = `
             <div class="multi-select-info">
@@ -104,6 +138,16 @@ export class ComponentEditor {
                     <div class="form-group">
                         <label>Watchpoint:</label>
                         <input type="checkbox" id="editWatchpoint" ${component.wp ? 'checked' : ''} />
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Primary Connection:</label>
+                        <input type="number" id="editPrimaryConnection" value="${component.j && component.j[0] ? component.j[0] : ''}" placeholder="Component ID (0 for none)" />
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Secondary Connection:</label>
+                        <input type="number" id="editSecondaryConnection" value="${component.j && component.j[1] ? component.j[1] : ''}" placeholder="Component ID (0 for none)" />
                     </div>
                     
                     ${component.values && component.values.conditions ? `
@@ -150,7 +194,7 @@ export class ComponentEditor {
         document.body.appendChild(modal);
         
         // Store current component for editing
-        (window as any).currentEditingComponent = component;
+        window.currentEditingComponent = component;
     }
     
     public closeComponentEditor(): void {
@@ -158,7 +202,7 @@ export class ComponentEditor {
         if (modal) {
             modal.remove();
         }
-        (window as any).currentEditingComponent = null;
+        window.currentEditingComponent = null;
     }
     
     public addParameter(): void {
@@ -193,11 +237,13 @@ export class ComponentEditor {
     }
     
     public saveComponentChanges(componentId: number): void {
-        const component = (window as any).currentEditingComponent;
+        const component = window.currentEditingComponent;
         if (!component) return;
         
         const commentInput = document.getElementById('editComment') as HTMLInputElement;
         const watchpointInput = document.getElementById('editWatchpoint') as HTMLInputElement;
+        const primaryConnectionInput = document.getElementById('editPrimaryConnection') as HTMLInputElement;
+        const secondaryConnectionInput = document.getElementById('editSecondaryConnection') as HTMLInputElement;
         
         // Gather form data
         const updatedComponent = {
@@ -205,6 +251,24 @@ export class ComponentEditor {
             c: commentInput?.value || '',
             wp: watchpointInput?.checked || false
         };
+        
+        // Update connections
+        if (!updatedComponent.j) {
+            updatedComponent.j = [];
+        }
+        
+        // Ensure j array has at least 2 elements
+        while (updatedComponent.j.length < 2) {
+            updatedComponent.j.push(0);
+        }
+        
+        // Update primary connection
+        const primaryValue = primaryConnectionInput?.value ? parseInt(primaryConnectionInput.value) : 0;
+        updatedComponent.j[0] = isNaN(primaryValue) ? 0 : primaryValue;
+        
+        // Update secondary connection
+        const secondaryValue = secondaryConnectionInput?.value ? parseInt(secondaryConnectionInput.value) : 0;
+        updatedComponent.j[1] = isNaN(secondaryValue) ? 0 : secondaryValue;
         
         // Update condition if exists
         const conditionInput = document.getElementById('editCondition') as HTMLTextAreaElement;
@@ -235,11 +299,23 @@ export class ComponentEditor {
         }
         
         // Send update to extension
-        const vscode = (window as any).vscode;
-        vscode.postMessage({
-            command: 'updateComponent',
-            component: updatedComponent
-        });
+        let vscode = window.vscode;
+        if (!vscode && window.acquireVsCodeApi) {
+            try {
+                vscode = window.acquireVsCodeApi();
+                window.vscode = vscode;
+            } catch (error) {
+                console.warn('VS Code API already acquired, using existing instance');
+                vscode = window.vscode;
+            }
+        }
+        
+        if (vscode && vscode.postMessage) {
+            vscode.postMessage({
+                command: 'updateComponent',
+                component: updatedComponent
+            });
+        }
         
         this.closeComponentEditor();
     }

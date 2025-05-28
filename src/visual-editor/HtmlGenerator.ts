@@ -26,7 +26,7 @@ export class HtmlGenerator {
                     <div class="section-content active" id="preprocSection">
                         <div class="section-header">
                             <h3>Preprocessing Components</h3>
-                            <p>v11: Components that run before the main processing logic</p>
+                            <p>Components that run before the main processing logic</p>
                         </div>
                         <div class="canvas-wrapper">
                             <svg id="preprocCanvas" class="component-canvas" width="1200" height="2000">
@@ -60,6 +60,12 @@ export class HtmlGenerator {
                     <div><kbd>Ctrl+A</kbd> - Select all</div>
                     <div><kbd>Delete</kbd> - Delete selected</div>
                     <div><kbd>Esc</kbd> - Clear selection</div>
+                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border);">
+                        <strong>Connections:</strong>
+                    </div>
+                    <div><kbd>Shift+Click</kbd> - Set primary connection</div>
+                    <div><kbd>Shift+Right-click</kbd> - Set secondary connection</div>
+                    <div><kbd>Right-click</kbd> - Remove connections</div>
                 </div>
             </div>
 

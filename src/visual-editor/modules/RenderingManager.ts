@@ -1,9 +1,22 @@
+// Type definitions for proper typing
+interface CustomWindow extends Window {
+    stateManager: any;
+    renderingManager: RenderingManager;
+    selectionManager: any;
+    dragDropManager: any;
+    componentEditor: any;
+    contextMenuManager: any;
+    connectionManager: any;
+}
+
+declare const window: CustomWindow;
+
 export class RenderingManager {
     
     public renderComponents(components: any[]): void {
         console.log('Rendering components:', components.length);
         
-        const stateManager = (window as any).stateManager;
+        const stateManager = window.stateManager;
         
         // Separate components by section
         const preprocComponents = components.filter(c => c.section === 'preproc');
@@ -19,7 +32,7 @@ export class RenderingManager {
         this.renderComponentSection(postprocComponents, 'postprocCanvas');
         
         // Restore selection states after re-rendering
-        const selectionManager = (window as any).selectionManager;
+        const selectionManager = window.selectionManager;
         selectionManager.restoreSelectionStates();
     }
     
@@ -73,7 +86,7 @@ export class RenderingManager {
         group.setAttribute('data-component-id', component.n.toString());
         group.setAttribute('data-section', component.section);
         
-        const stateManager = (window as any).stateManager;
+        const stateManager = window.stateManager;
         const color = stateManager.getComponentColor(component.t);
         const iconSize = 30;
         const textOffset = iconSize + 10;
@@ -117,12 +130,19 @@ export class RenderingManager {
         group.appendChild(typeText);
         group.appendChild(labelText);
         
-        // Add drag and drop event handlers
+        // Add event handlers
         group.addEventListener('mousedown', (e: MouseEvent) => {
             if (e.button === 0) { // Left mouse button
                 e.stopPropagation(); // Prevent canvas selection
                 
                 const componentKey = `${component.section}-${component.n}`;
+                
+                // Handle shift+click for connection creation
+                if (e.shiftKey) {
+                    const connectionManager = window.connectionManager;
+                    connectionManager.handleShiftClick(e, component);
+                    return; // Don't proceed with drag/selection
+                }
                 
                 // Handle selection logic
                 if (e.ctrlKey || e.metaKey) {
@@ -138,7 +158,7 @@ export class RenderingManager {
                     }
                 } else if (!stateManager.getSelectedComponents().has(componentKey)) {
                     // Single select if not already selected
-                    const selectionManager = (window as any).selectionManager;
+                    const selectionManager = window.selectionManager;
                     selectionManager.clearSelection();
                     stateManager.getSelectedComponents().add(componentKey);
                     group.classList.add('selected');
@@ -146,7 +166,7 @@ export class RenderingManager {
                 }
                 
                 // Start drag operation
-                const dragDropManager = (window as any).dragDropManager;
+                const dragDropManager = window.dragDropManager;
                 if (stateManager.getSelectedComponents().size > 1) {
                     dragDropManager.startMultiDrag(e, component);
                 } else {
@@ -155,12 +175,27 @@ export class RenderingManager {
             }
         });
         
+        // Add right-click handler for shift+right-click connections
+        group.addEventListener('contextmenu', (e: MouseEvent) => {
+            e.preventDefault();
+            
+            if (e.shiftKey) {
+                // Handle shift+right-click for secondary connection
+                const connectionManager = window.connectionManager;
+                connectionManager.handleShiftRightClick(e, component);
+            } else {
+                // Show connection menu for this specific component
+                const connectionManager = window.connectionManager;
+                connectionManager.showConnectionMenu(component, e.clientX, e.clientY);
+            }
+        });
+        
         // Add click handler for single selection
         group.addEventListener('click', (e: MouseEvent) => {
             if (!stateManager.getIsDragging() && !stateManager.getIsMultiDragging?.()) {
                 e.stopPropagation();
                 
-                const componentEditor = (window as any).componentEditor;
+                const componentEditor = window.componentEditor;
                 if (stateManager.getSelectedComponents().size === 1) {
                     componentEditor.showComponentDetails(component);
                 } else if (stateManager.getSelectedComponents().size > 1) {
@@ -172,7 +207,7 @@ export class RenderingManager {
         group.addEventListener('dblclick', (e: MouseEvent) => {
             if (!stateManager.getIsDragging() && !stateManager.getIsMultiDragging?.()) {
                 e.stopPropagation();
-                const componentEditor = (window as any).componentEditor;
+                const componentEditor = window.componentEditor;
                 componentEditor.showComponentEditor(component);
             }
         });
@@ -278,29 +313,29 @@ export class RenderingManager {
         // Create new handlers and store references
         canvasElement._vrmMouseDownHandler = (e: MouseEvent) => {
             if (e.target === canvas) {
-                const selectionManager = (window as any).selectionManager;
+                const selectionManager = window.selectionManager;
                 selectionManager.startSelection(e);
             }
         };
         
         canvasElement._vrmMouseMoveHandler = (e: MouseEvent) => {
-            const stateManager = (window as any).stateManager;
+            const stateManager = window.stateManager;
             if (stateManager.getIsSelecting()) {
-                const selectionManager = (window as any).selectionManager;
+                const selectionManager = window.selectionManager;
                 selectionManager.updateSelection(e);
             }
         };
         
         canvasElement._vrmMouseUpHandler = (e: MouseEvent) => {
-            const stateManager = (window as any).stateManager;
+            const stateManager = window.stateManager;
             if (stateManager.getIsSelecting()) {
-                const selectionManager = (window as any).selectionManager;
+                const selectionManager = window.selectionManager;
                 selectionManager.endSelection(e);
             }
         };
         
         canvasElement._vrmContextMenuHandler = (e: MouseEvent) => {
-            const contextMenuManager = (window as any).contextMenuManager;
+            const contextMenuManager = window.contextMenuManager;
             contextMenuManager.handleRightClick(e);
         };
         
