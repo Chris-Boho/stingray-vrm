@@ -9,9 +9,16 @@ export class HtmlGenerator {
         return  /*html*/ `
             <div class="visual-editor">
                 <div class="editor-toolbar">
-                    <button class="toolbar-btn" onclick="zoomIn()">Zoom In</button>
-                    <button class="toolbar-btn" onclick="zoomOut()">Zoom Out</button>
-                    <button class="toolbar-btn" onclick="resetZoom()">Reset Zoom</button>
+                    <div class="toolbar-left">
+                        <button class="toolbar-btn" onclick="zoomIn()">Zoom In</button>
+                        <button class="toolbar-btn" onclick="zoomOut()">Zoom Out</button>
+                        <button class="toolbar-btn" onclick="resetZoom()">Reset Zoom</button>
+                    </div>
+                    <div class="toolbar-right">
+                        <button class="info-btn" onclick="toggleKeyboardShortcuts()" title="Show/Hide Keyboard Shortcuts">
+                            <span class="info-icon">ℹ️</span>
+                        </button>
+                    </div>
                 </div>
                 
                 <div class="section-tabs">
@@ -86,21 +93,30 @@ export class HtmlGenerator {
                     <div id="detailsContent"></div>
                 </div>
                 
-                <div class="keyboard-shortcuts" id="keyboardShortcuts">
-                    <h4>Keyboard Shortcuts</h4>
-                    <div><kbd>Ctrl+Click</kbd> - Multi-select</div>
-                    <div><kbd>Click+Drag</kbd> - Box select</div>
-                    <div><kbd>Ctrl+A</kbd> - Select all</div>
-                    <div><kbd>Delete</kbd> - Delete selected</div>
-                    <div><kbd>Esc</kbd> - Clear selection</div>
-                    <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border);">
-                        <strong>Connections:</strong>
+                <!-- FIXED: Hidden keyboard shortcuts that can be toggled -->
+                <div class="keyboard-shortcuts" id="keyboardShortcuts" style="display: none;">
+                    <div class="shortcuts-header">
+                        <h4>Keyboard Shortcuts</h4>
+                        <button class="close-shortcuts" onclick="toggleKeyboardShortcuts()">×</button>
                     </div>
-                    <div><kbd>Shift+Click</kbd> - Set primary connection</div>
-                    <div><kbd>Shift+Right-click</kbd> - Set secondary connection</div>
-                    <div><kbd>Shift+Click empty</kbd> - Clear primary connection</div>
-                    <div><kbd>Shift+Right-click empty</kbd> - Clear secondary connection</div>
-                    <div><kbd>Right-click</kbd> - Remove connections</div>
+                    <div class="shortcuts-content">
+                        <div class="shortcut-section">
+                            <h5>Selection</h5>
+                            <div><kbd>Ctrl+Click</kbd> - Multi-select</div>
+                            <div><kbd>Click+Drag</kbd> - Box select</div>
+                            <div><kbd>Ctrl+A</kbd> - Select all</div>
+                            <div><kbd>Delete</kbd> - Delete selected</div>
+                            <div><kbd>Esc</kbd> - Clear selection</div>
+                        </div>
+                        <div class="shortcut-section">
+                            <h5>Connections</h5>
+                            <div><kbd>Shift+Click</kbd> - Set primary connection</div>
+                            <div><kbd>Shift+Right-click</kbd> - Set secondary connection</div>
+                            <div><kbd>Shift+Click empty</kbd> - Clear primary connection</div>
+                            <div><kbd>Shift+Right-click empty</kbd> - Clear secondary connection</div>
+                            <div><kbd>Right-click</kbd> - Remove connections</div>
+                        </div>
+                    </div>
                 </div>
             </div>
     
@@ -109,10 +125,206 @@ export class HtmlGenerator {
                 ${getComponentStyles()}
                 ${getModalStyles()}
                 ${getPaletteStyles()}
+                
+                /* FIXED: Additional styles for toolbar and info button */
+                .editor-toolbar {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 20px;
+                    padding-bottom: 15px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                
+                .toolbar-left {
+                    display: flex;
+                    gap: 10px;
+                }
+                
+                .toolbar-right {
+                    display: flex;
+                    gap: 10px;
+                    position: relative; /* FIXED: Make this a positioning context */
+                }
+                
+                .info-btn {
+                    background-color: var(--vscode-button-secondaryBackground);
+                    color: var(--vscode-button-secondaryForeground);
+                    border: 1px solid var(--vscode-button-border);
+                    padding: 8px 12px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    transition: all 0.2s ease;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    position: relative; /* FIXED: For dropdown positioning */
+                }
+                
+                .info-btn:hover {
+                    background-color: var(--vscode-button-secondaryHoverBackground);
+                    border-color: var(--vscode-focusBorder);
+                }
+                
+                .info-icon {
+                    font-size: 16px;
+                }
+                
+                /* FIXED: Position shortcuts panel as overlay next to info icon */
+                .keyboard-shortcuts {
+                    position: fixed; /* FIXED: Back to fixed positioning for precise placement */
+                    background-color: var(--vscode-editor-background);
+                    border: 1px solid var(--vscode-panel-border);
+                    border-radius: 8px;
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+                    z-index: 1000;
+                    min-width: 280px;
+                    max-width: 320px;
+                    /* Position will be set dynamically by JavaScript */
+                }
+                
+                .shortcuts-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 12px 16px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                    background-color: var(--vscode-panel-background);
+                    border-radius: 8px 8px 0 0;
+                }
+                
+                .shortcuts-header h4 {
+                    margin: 0;
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: var(--vscode-foreground);
+                }
+                
+                .close-shortcuts {
+                    background: none;
+                    border: none;
+                    color: var(--vscode-foreground);
+                    cursor: pointer;
+                    font-size: 18px;
+                    padding: 0;
+                    margin: 0;
+                    width: 20px;
+                    height: 20px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 2px;
+                }
+                
+                .close-shortcuts:hover {
+                    background-color: var(--vscode-toolbar-hoverBackground);
+                }
+                
+                .shortcuts-content {
+                    padding: 16px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 16px;
+                }
+                
+                .shortcut-section h5 {
+                    margin: 0 0 8px 0;
+                    font-size: 12px;
+                    font-weight: 600;
+                    color: var(--vscode-descriptionForeground);
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                }
+                
+                .shortcut-section div {
+                    margin-bottom: 6px;
+                    font-size: 12px;
+                    color: var(--vscode-foreground);
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                
+                .shortcut-section kbd {
+                    background-color: var(--vscode-keybindingLabel-background);
+                    color: var(--vscode-keybindingLabel-foreground);
+                    border: 1px solid var(--vscode-keybindingLabel-border);
+                    border-radius: 3px;
+                    padding: 2px 6px;
+                    font-size: 10px;
+                    font-family: var(--vscode-editor-font-family);
+                    font-weight: 500;
+                    white-space: nowrap;
+                }
             </style>
     
             <script>
                 ${getEditorScripts()}
+                
+                // FIXED: Position shortcuts panel precisely next to the info icon
+                function toggleKeyboardShortcuts() {
+                    const shortcuts = document.getElementById('keyboardShortcuts');
+                    const infoBtn = document.querySelector('.info-btn');
+                    
+                    if (shortcuts.style.display === 'none') {
+                        shortcuts.style.display = 'block';
+                        
+                        // FIXED: Get exact button position on screen
+                        const rect = infoBtn.getBoundingClientRect();
+                        const panelWidth = 300; // Approximate panel width
+                        const panelHeight = 400; // Approximate panel height
+                        const gap = 8; // Gap between button and panel
+                        
+                        // Calculate position - prefer right side of button
+                        let left = rect.right + gap;
+                        let top = rect.top;
+                        
+                        // Check if panel would go off right edge of screen
+                        if (left + panelWidth > window.innerWidth) {
+                            // Position to left of button instead
+                            left = rect.left - panelWidth - gap;
+                        }
+                        
+                        // Check if panel would go off bottom of screen
+                        if (top + panelHeight > window.innerHeight) {
+                            // Position above button
+                            top = rect.bottom - panelHeight;
+                        }
+                        
+                        // Ensure panel doesn't go off left edge
+                        if (left < 10) {
+                            left = 10;
+                        }
+                        
+                        // Ensure panel doesn't go off top edge
+                        if (top < 10) {
+                            top = 10;
+                        }
+                        
+                        // Apply calculated position
+                        shortcuts.style.left = left + 'px';
+                        shortcuts.style.top = top + 'px';
+                        shortcuts.style.right = 'auto';
+                        shortcuts.style.bottom = 'auto';
+                        
+                    } else {
+                        shortcuts.style.display = 'none';
+                    }
+                }
+                
+                // Close shortcuts when clicking outside
+                document.addEventListener('click', function(e) {
+                    const shortcuts = document.getElementById('keyboardShortcuts');
+                    const infoBtn = document.querySelector('.info-btn');
+                    
+                    if (shortcuts.style.display === 'block' && 
+                        !shortcuts.contains(e.target) && 
+                        !infoBtn.contains(e.target)) {
+                        shortcuts.style.display = 'none';
+                    }
+                });
             </script>
         `;
     }

@@ -114,33 +114,17 @@ export class ComponentPalette {
             return;
         }
     
-        // Group components by category
-        const categories = this.groupComponentsByCategory();
-        
+        // FIXED: Just display all components in a single horizontal row - no categories at all
         let contentHTML = '';
         
-        // Add components by category in horizontal layout
-        Object.entries(categories).forEach(([category, components]) => {
+        this.componentDefinitions.forEach(comp => {
             contentHTML += `
-                <div class="palette-category">
-                    <div class="category-header">${category}</div>
-                    <div class="category-components">
-            `;
-            
-            components.forEach(comp => {
-                contentHTML += `
-                    <div class="palette-component" 
-                         data-component-type="${comp.type}"
-                         draggable="true"
-                         title="${comp.description}">
-                        <div class="component-icon">${comp.icon}</div>
-                        <div class="component-name">${comp.name}</div>
-                    </div>
-                `;
-            });
-            
-            contentHTML += `
-                    </div>
+                <div class="palette-component" 
+                     data-component-type="${comp.type}"
+                     draggable="true"
+                     title="${comp.description}">
+                    <div class="component-icon">${comp.icon}</div>
+                    <div class="component-name">${comp.name}</div>
                 </div>
             `;
         });
@@ -148,18 +132,7 @@ export class ComponentPalette {
         paletteContent.innerHTML = contentHTML;
     }
 
-    private groupComponentsByCategory(): Record<string, typeof this.componentDefinitions> {
-        const categories: Record<string, typeof this.componentDefinitions> = {};
-        
-        this.componentDefinitions.forEach(comp => {
-            if (!categories[comp.category]) {
-                categories[comp.category] = [];
-            }
-            categories[comp.category].push(comp);
-        });
-
-        return categories;
-    }
+    // Remove the groupComponentsByCategory method since we don't need it
 
     private setupPaletteEventHandlers(): void {
         // Handle drag start from palette
@@ -189,25 +162,54 @@ export class ComponentPalette {
             }
         });
 
-        // Handle drag end
+        // Handle drag end - FIXED: Always clean up, even if drop didn't happen
         document.addEventListener('dragend', (e: DragEvent) => {
-            if (this.isDraggingFromPalette) {
+            const target = e.target as HTMLElement;
+            if (target.classList.contains('palette-component')) {
                 this.endPaletteDrag();
             }
         });
 
-        // Handle click for component insertion (alternative to drag)
+        // FIXED: Handle click for component insertion - only if NOT dragging
         document.addEventListener('click', (e: MouseEvent) => {
+            // Don't handle click if we just finished a drag operation
+            if (this.isDraggingFromPalette) {
+                return;
+            }
+            
             const target = e.target as HTMLElement;
             const paletteComponent = target.closest('.palette-component') as HTMLElement;
             
             if (paletteComponent) {
                 const componentType = paletteComponent.getAttribute('data-component-type');
                 if (componentType) {
-                    // Insert at default position (center of current view)
-                    this.insertComponentAtPosition(componentType, 200, 200);
+                    // Only insert via click if draggable attribute is false or if it's a deliberate click
+                    // Check if this was a mouse click without drag
+                    if (!paletteComponent.hasAttribute('data-drag-started')) {
+                        // Insert at default position (center of current view)
+                        this.insertComponentAtPosition(componentType, 200, 200);
+                    }
                 }
             }
+        });
+
+        // FIXED: Add mouse down/up tracking to distinguish clicks from drags
+        document.addEventListener('mousedown', (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            const paletteComponent = target.closest('.palette-component') as HTMLElement;
+            if (paletteComponent) {
+                paletteComponent.setAttribute('data-mouse-down', 'true');
+            }
+        });
+
+        document.addEventListener('mouseup', (e: MouseEvent) => {
+            // FIXED: Clean up all palette components, not just the target
+            document.querySelectorAll('.palette-component').forEach(component => {
+                component.removeAttribute('data-mouse-down');
+                component.removeAttribute('data-drag-started');
+                // Remove any visual drag states
+                component.classList.remove('dragging', 'pressed', 'active');
+            });
         });
     }
 
@@ -216,17 +218,32 @@ export class ComponentPalette {
         this.isDraggingFromPalette = true;
         this.draggedComponentType = componentType;
 
-        // Create ghost element
-        this.createPaletteGhost(componentType);
+        // FIXED: Mark the component as drag-started to prevent click handler
+        const target = e.target as HTMLElement;
+        const paletteComponent = target.closest('.palette-component') as HTMLElement;
+        if (paletteComponent) {
+            paletteComponent.setAttribute('data-drag-started', 'true');
+        }
 
-        // Set drag data
+        // FIXED: Disable the default drag image to prevent ghost effects
         if (e.dataTransfer) {
+            // Create a transparent 1x1 pixel image to replace the default drag image
+            const emptyImg = new Image();
+            emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=';
+            e.dataTransfer.setDragImage(emptyImg, 0, 0);
+            
             e.dataTransfer.setData('text/plain', componentType);
             e.dataTransfer.effectAllowed = 'copy';
         }
+
+        // Create our custom ghost element
+        this.createPaletteGhost(componentType);
     }
 
     private createPaletteGhost(componentType: string): void {
+        // FIXED: Remove any existing ghost first
+        this.cleanupPaletteGhost();
+        
         const ghost = document.createElement('div');
         ghost.className = 'palette-ghost';
         
@@ -238,10 +255,21 @@ export class ComponentPalette {
             `;
         }
 
+        // FIXED: Better styling to prevent interference
         ghost.style.position = 'fixed';
         ghost.style.pointerEvents = 'none';
         ghost.style.zIndex = '10000';
         ghost.style.opacity = '0.8';
+        ghost.style.backgroundColor = 'var(--vscode-editor-background)';
+        ghost.style.border = '1px solid var(--vscode-focusBorder)';
+        ghost.style.borderRadius = '4px';
+        ghost.style.padding = '4px 8px';
+        ghost.style.fontSize = '12px';
+        ghost.style.color = 'var(--vscode-foreground)';
+        ghost.style.whiteSpace = 'nowrap';
+        ghost.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+        // FIXED: Start hidden until first mouse move
+        ghost.style.visibility = 'hidden';
         
         document.body.appendChild(ghost);
         this.paletteGhost = ghost;
@@ -249,24 +277,36 @@ export class ComponentPalette {
 
     private updatePaletteGhost(e: DragEvent): void {
         if (this.paletteGhost) {
+            // FIXED: Show ghost on first move and update position
+            this.paletteGhost.style.visibility = 'visible';
             this.paletteGhost.style.left = (e.clientX + 10) + 'px';
             this.paletteGhost.style.top = (e.clientY + 10) + 'px';
         }
     }
 
     private handlePaletteDrop(e: DragEvent): void {
-        // Check if we're dropping on a canvas
+        // FIXED: Prevent double insertion by checking if drop actually happened on canvas
         const target = e.target as HTMLElement;
         const canvas = target.closest('.component-canvas') as HTMLElement;
         
-        if (canvas && this.draggedComponentType) {
-            const canvasRect = canvas.getBoundingClientRect();
-            const x = e.clientX - canvasRect.left;
-            const y = e.clientY - canvasRect.top;
-            
-            console.log(`Dropping ${this.draggedComponentType} at (${x}, ${y})`);
-            this.insertComponentAtPosition(this.draggedComponentType, x, y);
+        if (!canvas || !this.draggedComponentType) {
+            console.log('Drop not on canvas or no component type, ignoring');
+            return;
         }
+
+        // FIXED: Only insert if we haven't already inserted via click
+        const canvasRect = canvas.getBoundingClientRect();
+        const x = e.clientX - canvasRect.left;
+        const y = e.clientY - canvasRect.top;
+        
+        console.log(`Dropping ${this.draggedComponentType} at (${x}, ${y})`);
+        
+        // FIXED: Set a flag to prevent click insertion
+        this.isDraggingFromPalette = false; // Mark as not dragging before insertion
+        this.insertComponentAtPosition(this.draggedComponentType, x, y);
+        
+        // FIXED: Clear the dragged component type immediately to prevent double insertion
+        this.draggedComponentType = null;
     }
 
     private insertComponentAtPosition(componentType: string, x: number, y: number): void {
@@ -467,9 +507,24 @@ export class ComponentPalette {
         this.isDraggingFromPalette = false;
         this.draggedComponentType = null;
 
-        // Remove ghost
+        // FIXED: Clean up all drag states from palette components
+        document.querySelectorAll('.palette-component').forEach(component => {
+            component.removeAttribute('data-drag-started');
+            component.removeAttribute('data-mouse-down');
+            // Remove any drag-related classes
+            component.classList.remove('dragging', 'pressed', 'active');
+        });
+
+        // FIXED: Always clean up ghost
+        this.cleanupPaletteGhost();
+    }
+
+    // FIXED: Separate method for ghost cleanup
+    private cleanupPaletteGhost(): void {
         if (this.paletteGhost) {
-            document.body.removeChild(this.paletteGhost);
+            if (this.paletteGhost.parentNode) {
+                document.body.removeChild(this.paletteGhost);
+            }
             this.paletteGhost = null;
         }
     }
