@@ -5,7 +5,6 @@ import {
     VsCodeApi,
     CustomWindow 
 } from '../../types';
-import { ComponentTemplates } from '../../ComponentTemplate';
 
 declare const window: CustomWindow;
 
@@ -282,6 +281,12 @@ export class ComponentPalette {
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
 
         try {
+            // FIXED: Access ComponentTemplates properly from the global window
+            const ComponentTemplates = this.getComponentTemplatesClass();
+            if (!ComponentTemplates) {
+                throw new Error('ComponentTemplates class not available - ensure it is properly injected into the window object');
+            }
+
             // Create new component using template
             const newComponent = ComponentTemplates.createComponent(
                 componentType, 
@@ -320,6 +325,140 @@ export class ComponentPalette {
         } catch (error) {
             console.error('Error creating component:', error);
             this.showMessage(`Error creating ${componentType} component: ${error}`);
+        }
+    }
+
+    /**
+     * FIXED: Helper method to safely access ComponentTemplates from window
+     * This handles the different ways ComponentTemplates might be stored
+     */
+    private getComponentTemplatesClass(): any {
+        // Try multiple ways to access ComponentTemplates
+        const windowAny = window as any;
+        
+        // Method 1: Direct property access
+        if (windowAny.ComponentTemplates) {
+            console.log('Found ComponentTemplates via direct access');
+            return windowAny.ComponentTemplates;
+        }
+        
+        // Method 2: Check if it's nested somewhere
+        if (windowAny.ComponentTemplate_1) {
+            console.log('Found ComponentTemplates as ComponentTemplate_1');
+            return windowAny.ComponentTemplate_1;
+        }
+        
+        // Method 3: Try to find it in the global scope by name
+        try {
+            const globalComponentTemplates = eval('ComponentTemplates');
+            if (globalComponentTemplates) {
+                console.log('Found ComponentTemplates via eval');
+                return globalComponentTemplates;
+            }
+        } catch (e) {
+            // Eval failed, continue
+        }
+        
+        // Method 4: Last resort - create inline templates
+        console.warn('ComponentTemplates not found, creating inline fallback');
+        return this.createInlineComponentTemplates();
+    }
+
+    /**
+     * FIXED: Fallback inline component templates if the main class isn't available
+     */
+    private createInlineComponentTemplates(): any {
+        return {
+            createComponent: (componentType: string, section: 'preproc' | 'postproc', existingComponents: VrmComponent[], x: number, y: number): VrmComponent => {
+                // Generate next available component ID
+                const getNextComponentId = (components: VrmComponent[]): number => {
+                    if (components.length === 0) return 1;
+                    const usedIds = components.map(c => c.n);
+                    const maxId = Math.max(...usedIds);
+                    for (let i = 1; i <= maxId; i++) {
+                        if (!usedIds.includes(i)) {
+                            return i;
+                        }
+                    }
+                    return maxId + 1;
+                };
+
+                const nextId = getNextComponentId(existingComponents);
+                
+                // Create basic template for any component type
+                const baseComponent: VrmComponent = {
+                    n: nextId,
+                    t: componentType,
+                    values: this.getDefaultValuesForType(componentType),
+                    j: [0, 0],
+                    x: x,
+                    y: y,
+                    c: '',
+                    wp: null,
+                    section: section
+                };
+
+                return baseComponent;
+            }
+        };
+    }
+
+    /**
+     * FIXED: Default values for each component type
+     */
+    private getDefaultValuesForType(componentType: string): any {
+        switch (componentType) {
+            case 'CSF':
+                return {
+                    functionName: 'GetConstant',
+                    returnValue: '',
+                    functionParams: []
+                };
+            case 'SQLTRN':
+                return {
+                    transactionName: '',
+                    transactionType: ''
+                };
+            case 'MATH':
+                return {
+                    mathName: '',
+                    mathFormat: '',
+                    mathParam: ''
+                };
+            case 'TEMPLATE':
+                return {
+                    templateName: '',
+                    templateTarget: ''
+                };
+            case 'INSERTUPDATEQUERY':
+            case 'SELECTQUERY':
+                return {
+                    query: '',
+                    params: []
+                };
+            case 'SCRIPT':
+                return {
+                    script: '',
+                    language: ''
+                };
+            case 'ERROR':
+                return {
+                    errorMessage: ''
+                };
+            case 'IF':
+                return {
+                    condition: ''
+                };
+            case 'SET':
+                return {
+                    variables: [{ name: '', value: '' }]
+                };
+            case 'EXTERNAL':
+                return {
+                    externalValue: ''
+                };
+            default:
+                return {};
         }
     }
 
