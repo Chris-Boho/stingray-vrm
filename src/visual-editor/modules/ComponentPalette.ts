@@ -96,41 +96,40 @@ export class ComponentPalette {
     ];
 
     public initializePalette(): void {
-        this.createPaletteSidebar();
+        // Don't create new palette structure, just populate the existing ones
+        this.populateExistingPalette('componentPalette');
+        this.populateExistingPalette('componentPalettePostproc');
         this.setupPaletteEventHandlers();
     }
-
-    private createPaletteSidebar(): void {
-        // Check if palette already exists
-        if (document.getElementById('componentPalette')) {
+    
+    private populateExistingPalette(paletteId: string): void {
+        const palette = document.getElementById(paletteId);
+        if (!palette) {
+            console.warn(`Palette ${paletteId} not found, creating content in existing structure`);
             return;
         }
-
-        const palette = document.createElement('div');
-        palette.id = 'componentPalette';
-        palette.className = 'component-palette';
-        
+    
+        const paletteContent = palette.querySelector('.palette-content');
+        if (!paletteContent) {
+            console.warn(`Palette content not found in ${paletteId}`);
+            return;
+        }
+    
         // Group components by category
         const categories = this.groupComponentsByCategory();
         
-        let paletteHTML = `
-            <div class="palette-header">
-                <h3>Components</h3>
-                <button class="palette-toggle" onclick="togglePalette()">◀</button>
-            </div>
-            <div class="palette-content">
-        `;
-
-        // Add components by category
+        let contentHTML = '';
+        
+        // Add components by category in horizontal layout
         Object.entries(categories).forEach(([category, components]) => {
-            paletteHTML += `
+            contentHTML += `
                 <div class="palette-category">
                     <div class="category-header">${category}</div>
                     <div class="category-components">
             `;
             
             components.forEach(comp => {
-                paletteHTML += `
+                contentHTML += `
                     <div class="palette-component" 
                          data-component-type="${comp.type}"
                          draggable="true"
@@ -141,23 +140,13 @@ export class ComponentPalette {
                 `;
             });
             
-            paletteHTML += `
+            contentHTML += `
                     </div>
                 </div>
             `;
         });
-
-        paletteHTML += `
-            </div>
-            <div class="palette-footer">
-                <div class="palette-instructions">
-                    <small>Drag components to canvas or use right-click menu</small>
-                </div>
-            </div>
-        `;
-
-        palette.innerHTML = paletteHTML;
-        document.body.appendChild(palette);
+        
+        paletteContent.innerHTML = contentHTML;
     }
 
     private groupComponentsByCategory(): Record<string, typeof this.componentDefinitions> {
@@ -427,7 +416,10 @@ export class ComponentPalette {
             
             // Initialize palette when DOM is ready
             document.addEventListener('DOMContentLoaded', function() {
-                window.componentPalette.initializePalette();
+                // Don't call createPaletteSidebar, just initialize with existing structure
+                if (window.componentPalette) {
+                    window.componentPalette.initializePalette();
+                }
             });
             
             // Make functions globally available

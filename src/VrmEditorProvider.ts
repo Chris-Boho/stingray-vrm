@@ -718,7 +718,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             }
         }
         
-        return `<!DOCTYPE html>
+        return /* html*/`<!DOCTYPE html>
         <html lang="en">
         <head>
             <meta charset="UTF-8">
@@ -764,8 +764,6 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             </style>
         </head>
         <body>
-            <h1>VRM File Editor</h1>
-            
             <div class="header">
                 <button class="button" onclick="openHtml()">Open HTML Editor</button>
                 <button class="button" onclick="openJs()">Open JavaScript Editor</button>

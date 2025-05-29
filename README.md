@@ -22,12 +22,14 @@ src/
 ├── VrmParser.ts             # XML parsing and manipulation
 ├── VrmVisualEditor.ts       # Visual programming interface
 ├── types.ts                 # TypeScript interface definitions
+├── ComponentTemplate.ts      # Component template definitions
 └── visual-editor/
     ├── ComponentParser.ts    # Parses VRM components from XML
     ├── ComponentXmlGenerator.ts # Generates XML from components
     ├── EditorScripts.ts     # JavaScript functionality for editor
     ├── HtmlGenerator.ts      # Generates HTML for visual editor
     ├── VrmComponent.ts       # Component interface definitions
+    ├── ComponentPalette.ts   # Component palette and insertion
     ├── modules/             # Manager classes for editor functionality
     │   ├── StateManager.ts      # Global state management
     │   ├── SelectionManager.ts  # Component selection handling
@@ -38,6 +40,10 @@ src/
     │   ├── KeyboardManager.ts   # Keyboard shortcuts
     │   └── ConnectionManager.ts # Component connection manipulation
     └── styles/              # CSS styles for editor UI
+        ├── EditorStyles.ts      # Main editor styling
+        ├── ComponentStyles.ts   # Component visual styles
+        ├── ModalStyles.ts       # Modal dialog styles
+        └── PaletteStyles.ts     # Component palette styles
 ```
 
 ## Core Files Description
@@ -59,6 +65,8 @@ src/
   - Manages temporary file creation and cleanup
   - Handles HTML/JS editor workflows
   - Processes component updates from visual editor
+  - **NEW**: Handles component addition via `addComponent` command
+  - **NEW**: Enhanced XML generation for all component types
 - **Features**:
   - Temp file management in `.vscode/vrm-editor/`
   - Enhanced auto-cleanup when VRM files are closed
@@ -66,6 +74,7 @@ src/
   - Live sync between temp files and VRM content
   - Dual cleanup strategy (tracked files + directory scanning)
   - Proper editor closing before file deletion
+  - **NEW**: Component insertion and XML generation
 
 ### VrmDocument.ts
 
@@ -101,6 +110,39 @@ src/
   - Implements drag-and-drop component repositioning
   - Advanced connection routing with multiple algorithms
 
+### ComponentTemplate.ts
+
+- **Purpose**: Template definitions for creating new components
+- **Key Features**:
+  - Factory methods for all 11 component types
+  - Generates unique component IDs automatically
+  - Creates properly formatted blank components
+  - Supports all VRM component specifications
+- **Component Types**:
+  - `SQLTRN` - SQL Transaction components
+  - `CSF` - Script Function components
+  - `SCRIPT` - Script Block components
+  - `ERROR` - Error handling components
+  - `IF` - Conditional logic components
+  - `MATH` - Mathematical operations
+  - `SET` - Multi-variable assignment
+  - `EXTERNAL` - External rule calls
+  - `TEMPLATE` - Template processing
+  - `INSERTUPDATEQUERY` - Database insert/update
+  - `SELECTQUERY` - Database select operations
+
+### ComponentPalette.ts *(NEW)*
+
+- **Purpose**: Horizontal component palette for easy component insertion
+- **Key Features**:
+  - Categorized component library (Database, Script, Control, Data, Integration)
+  - Drag-and-drop component insertion
+  - Click-to-insert functionality
+  - Responsive scalable design
+  - Visual ghost feedback during drag operations
+  - Grid snapping for precise placement
+  - Integration with ComponentTemplates for proper component creation
+
 ### types.ts
 
 - **Purpose**: Centralized TypeScript type definitions
@@ -113,6 +155,7 @@ src/
   - `IConnectionManager` - Connection manipulation interface
   - `CustomWindow` - Extended window object with manager references
   - Handler types for proper event management
+  - **NEW**: Enhanced ComponentValues interface with all component types
 
 ### Manager Classes (src/visual-editor/modules/)
 
@@ -161,14 +204,17 @@ src/
   - Parameter management for SQL queries
   - Connection information display
   - Multi-selection details
+  - **NEW**: Support for all 11 component types with specialized editing forms
 
-#### ContextMenuManager.ts
+#### ContextMenuManager.ts *(ENHANCED)*
 - **Purpose**: Right-click context menu functionality
 - **Features**:
   - Selection operations (above/below/row/column)
   - Temporary notification messages
   - Menu positioning and styling
   - Outside-click menu closing
+  - **NEW**: Hierarchical component insertion menu
+  - **NEW**: Categorized component creation (Database, Script, Control, Data, Integration)
 
 #### KeyboardManager.ts
 - **Purpose**: Keyboard shortcut handling
@@ -226,6 +272,23 @@ Each workflow component has:
 6. **Edit properties** → Component type, SQL queries, parameters, conditions, connections
 7. **Save changes** → Updates written back to VRM XML with real-time position updates
 
+### Component Insertion *(NEW)*
+
+#### Using the Component Palette
+1. **View the horizontal component palette** below each section header
+2. **Browse categorized components** (Database, Script, Control, Data, Integration)
+3. **Drag components** from palette directly to canvas
+4. **Or click components** to insert at default position
+5. **Components auto-snap to grid** for perfect alignment
+6. **Automatic ID assignment** ensures no conflicts
+
+#### Using the Context Menu
+1. **Right-click on canvas** to open context menu
+2. **Select "Insert Component"** → Browse hierarchical menu
+3. **Choose from categories**: Database Components, Script Components, Control Components, Data Components, Integration Components
+4. **Select specific component** to insert at cursor position
+5. **Component created instantly** with proper XML structure
+
 ### Connection Management
 
 1. **Select a component** by clicking on it
@@ -272,6 +335,17 @@ Each workflow component has:
 - **Grid snapping**: Components snap to 32x26px grid for alignment
 - **Real-time updates**: Position changes immediately saved to VRM file
 
+#### Component Palette *(NEW)*
+
+- **Horizontal toolbar design**: Appears below section headers, above canvas
+- **Categorized layout**: Components organized by Database, Script, Control, Data, Integration
+- **Responsive scaling**: Automatically adjusts to available width
+- **Drag-and-drop insertion**: Drag components from palette to canvas
+- **Click-to-insert**: Alternative insertion method for quick adding
+- **Visual feedback**: Ghost elements during drag operations
+- **Grid snapping**: Components automatically align to grid when inserted
+- **Template integration**: Uses ComponentTemplates for proper blank component creation
+
 #### Advanced Connection Management
 
 - **Dual connections**: Each component supports primary and secondary connections
@@ -310,6 +384,40 @@ Each workflow component has:
 - **Keyboard shortcuts**: Ctrl+A (select all), Escape (clear selection)
 - **Visual feedback**: Selected components highlighted with outline
 
+### Enhanced Context Menu System *(NEW)*
+
+#### Hierarchical Menu Structure
+- **Select** → Various selection options (All Below/Above, Row/Column, Select All, Clear)
+- **Edit** → Cut/Copy/Paste/Delete (placeholders for future implementation)
+- **Insert Component** → Categorized component insertion:
+  - **Database Components**: SQL Transaction, Select Query, Insert/Update Query
+  - **Script Components**: Script Function, Script Block
+  - **Control Components**: Condition (IF), Error Component
+  - **Data Components**: Multi-Set Variables, Math Operation
+  - **Integration Components**: External Call, Template
+
+### Component Template System *(NEW)*
+
+#### Comprehensive Component Support
+- **11 Component Types**: Full support for all VRM component specifications
+- **Blank Templates**: Creates properly formatted empty components ready for editing
+- **Unique ID Generation**: Automatically assigns next available component ID
+- **Section Awareness**: Components created in appropriate preproc/postproc sections
+- **XML Generation**: Proper XML structure with all required tags and formatting
+
+#### Supported Component Types
+1. **SQLTRN** - SQL Transaction (Begin/Commit/Rollback)
+2. **CSF** - Script Function calls with parameters
+3. **SCRIPT** - Custom script execution (Pascal)
+4. **ERROR** - Error message display and halt execution
+5. **IF** - Conditional branching logic
+6. **MATH** - Mathematical calculations and formatting
+7. **SET** - Multi-variable assignment operations
+8. **EXTERNAL** - External rule and procedure calls
+9. **TEMPLATE** - Template processing and content generation
+10. **INSERTUPDATEQUERY** - Database record insertion and updates
+11. **SELECTQUERY** - Database record selection and retrieval
+
 ### Language Support
 
 - **HTML**: Full IntelliSense, syntax highlighting, Emmet support
@@ -340,6 +448,8 @@ Each workflow component has:
 - **XML manipulation**: Preserves structure while allowing targeted updates
 - **Modular design**: Separate manager classes for different responsibilities
 - **Type-safe**: Full TypeScript typing throughout the codebase
+- **Component Templates**: Factory pattern for creating blank components
+- **Responsive Design**: Scalable component palette that adapts to screen size
 
 ### TypeScript Type System
 
@@ -348,6 +458,7 @@ Each workflow component has:
 - **Generic type safety**: Proper typing for event handlers and callbacks
 - **No `any` types**: Full type coverage for compile-time error checking
 - **Custom Window typing**: Extended window object with manager references
+- **Enhanced ComponentValues**: Support for all 11 component types with specific value structures
 
 ### Grid System
 
@@ -390,6 +501,18 @@ Each workflow component has:
 - **Connection visualization**: Multiple routing algorithms for clean paths
 - **Modal editing**: Complete forms for all component properties
 - **State management**: Tracks component positions, selections, and editing state
+- **Component Palette**: Horizontal toolbar with categorized components
+- **Responsive scaling**: Components scale to fit available width
+
+### Component Insertion System
+
+- **Dual insertion methods**: Drag-and-drop from palette OR context menu selection
+- **Template integration**: Uses ComponentTemplates.createComponent() for proper blank components
+- **Grid snapping**: All inserted components automatically align to grid
+- **Section awareness**: Components added to currently active section (preproc/postproc)
+- **Unique ID assignment**: Automatically finds next available component ID
+- **Real-time XML updates**: Components immediately written to VRM file
+- **Visual feedback**: Success messages and drag ghost elements
 
 ## Development Notes
 
@@ -409,6 +532,7 @@ Each workflow component has:
 - Drag-and-drop state management
 - Grid snapping calculations
 - Connection state tracking
+- **NEW**: Component palette state and insertion tracking
 
 ### Error Handling
 
@@ -418,8 +542,54 @@ Each workflow component has:
 - Graceful degradation for malformed content
 - Cleanup error handling to prevent orphaned files
 - Type-safe error boundaries
+- **NEW**: Component creation error handling and user feedback
 
 ## Recent Enhancements
+
+### Version 4.0 Features *(NEW)*
+
+#### Component Palette System
+
+- **Horizontal component toolbar**: Positioned below section headers, above canvas
+- **Categorized component library**: Database, Script, Control, Data, Integration categories
+- **Responsive scaling design**: Components automatically scale to fit available width
+- **Drag-and-drop insertion**: Drag components from palette directly to canvas
+- **Click-to-insert functionality**: Alternative method for quick component insertion
+- **Visual drag feedback**: Ghost elements and hover states during drag operations
+- **Grid integration**: Components snap to 32x26 grid when inserted from palette
+
+#### Enhanced Context Menu System
+
+- **Hierarchical component insertion**: Multi-level menus for organized component creation
+- **Category-based organization**: Components grouped by function (Database, Script, etc.)
+- **Improved menu positioning**: Smart positioning to prevent off-screen menus
+- **Visual menu styling**: Consistent with VSCode theme and design standards
+- **Enhanced navigation**: Smooth submenu transitions and hover states
+
+#### Component Template System
+
+- **Comprehensive template library**: Support for all 11 VRM component types
+- **Factory pattern implementation**: Clean, maintainable component creation
+- **Blank component generation**: Properly formatted empty components ready for editing
+- **Unique ID management**: Automatic assignment of next available component IDs
+- **XML structure compliance**: Generated components match VRM specifications exactly
+- **Type-specific value structures**: Each component type has appropriate default values
+
+#### Enhanced XML Generation
+
+- **Component-specific XML generators**: Specialized generation for each component type
+- **Proper CDATA handling**: Correct encoding for script content and queries
+- **Empty tag management**: Appropriate use of self-closing and empty tags
+- **Formatting preservation**: Maintains consistent XML indentation and structure
+- **Error-resistant generation**: Graceful handling of missing or invalid component data
+
+#### Responsive Design Improvements
+
+- **Scalable component sizing**: Components scale from 20px to 32px based on viewport
+- **Flexible layout system**: Categories distribute evenly across available width
+- **Adaptive text sizing**: Component names and labels scale appropriately
+- **Multi-line text support**: Long component names can wrap to multiple lines
+- **Responsive breakpoints**: Optimized layouts for different screen sizes
 
 ### Version 3.0 Features
 
@@ -506,6 +676,11 @@ Each workflow component has:
 - **Drag component**: Move component (with grid snapping)
 - **Drag selected components**: Move all selected components together
 
+### Component Insertion *(NEW)*
+- **Right-click canvas**: Open context menu with component insertion options
+- **Drag from palette**: Drag component from palette to canvas
+- **Click palette component**: Insert component at default position
+
 ## Future Enhancements
 
 ### Potential Features
@@ -520,6 +695,9 @@ Each workflow component has:
 - **Component deletion**: Delete key support for removing components
 - **Component duplication**: Copy and paste components
 - **Workflow validation**: Check for unreachable components and circular references
+- **Advanced palette features**: Search/filter components, custom categories
+- **Template customization**: User-defined component templates
+- **Bulk operations**: Multi-component editing and property changes
 
 ### Performance Optimizations
 
@@ -529,3 +707,5 @@ Each workflow component has:
 - **Virtual scrolling**: Handle large workflows efficiently
 - **Connection optimization**: Reduce rendering overhead for complex workflows
 - **Batch operations**: Group multiple component updates for efficiency
+- **Palette virtualization**: Only render visible palette components
+- **Smart re-rendering**: Only update changed components and connections
