@@ -57,6 +57,9 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     case 'updateComponents':
                         this.updateComponents(message.components);
                         break;
+                    case 'addComponent':
+                        this.addComponent(message.component);
+                        break;
                 }
             },
             undefined,
@@ -82,6 +85,63 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         });
 
         this.updateWebview(webviewPanel.webview);
+    }
+
+    private addComponent(newComponent: any): void {
+        if (!this.activeDocument) {
+            console.error('No active document for adding component');
+            return;
+        }
+
+        console.log(`Adding new component ${newComponent.n} (${newComponent.t}) to ${newComponent.section}`);
+
+        try {
+            // Get current VRM content
+            let currentContent = this.activeDocument.getDocument().getText();
+            
+            // Generate XML for the new component using the existing method
+            const componentXml = this.generateComponentXml(newComponent);
+            
+            // Add component to the appropriate section
+            currentContent = this.addComponentToSection(currentContent, componentXml, newComponent.section);
+            
+            // Apply changes
+            this.applyEditWithRetry(currentContent);
+            
+            console.log(`Successfully added component ${newComponent.n}`);
+            
+        } catch (error) {
+            console.error('Error adding component:', error);
+            vscode.window.showErrorMessage(`Failed to add component: ${error}`);
+        }
+    }
+
+    private addComponentToSection(xmlContent: string, componentXml: string, section: 'preproc' | 'postproc'): string {
+        const sectionRegex = new RegExp(`(<${section}>)(.*?)(<\/${section}>)`, 's');
+        const match = xmlContent.match(sectionRegex);
+        
+        if (match) {
+            const [fullMatch, openTag, sectionContent, closeTag] = match;
+            
+            // Add the new component before the closing tag
+            const updatedSectionContent = sectionContent.trim() + '\n        ' + componentXml + '\n    ';
+            const updatedSection = openTag + updatedSectionContent + closeTag;
+            
+            return xmlContent.replace(fullMatch, updatedSection);
+        } else {
+            // Section doesn't exist, create it
+            const newSection = `    <${section}>\n        ${componentXml}\n    </${section}>`;
+            
+            // Find a good place to insert the section (before </vrm> or after existing sections)
+            const vrmCloseMatch = xmlContent.match(/(\s*)<\/vrm>/);
+            if (vrmCloseMatch) {
+                const indentation = vrmCloseMatch[1] || '';
+                return xmlContent.replace('</vrm>', `${newSection}\n${indentation}</vrm>`);
+            } else {
+                // Fallback: append at the end
+                return xmlContent + '\n' + newSection;
+            }
+        }
     }
 
     private updateComponents(updatedComponents: any[]): void {
@@ -637,119 +697,119 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     private getHtmlForWebview(webview: vscode.Webview): string {
-      // Parse components from VRM file with section information
-      const vrmContent = this.activeDocument?.getDocument().getText() || '';
-      
-      // Parse both sections separately to maintain section identity
-      const preprocMatch = vrmContent.match(/<preproc>([\s\S]*?)<\/preproc>/);
-      const postprocMatch = vrmContent.match(/<postproc>([\s\S]*?)<\/postproc>/);
-      
-      let allComponents: any[] = [];
-      
-      if (this.visualEditor) {
-          if (preprocMatch) {
-              const preprocComponents = this.visualEditor.parseComponentSection(preprocMatch[1], 'preproc');
-              allComponents = allComponents.concat(preprocComponents);
-          }
-          
-          if (postprocMatch) {
-              const postprocComponents = this.visualEditor.parseComponentSection(postprocMatch[1], 'postproc');
-              allComponents = allComponents.concat(postprocComponents);
-          }
-      }
-      
-      return `<!DOCTYPE html>
-      <html lang="en">
-      <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>VRM Editor</title>
-          <style>
-              body {
-                  font-family: var(--vscode-font-family);
-                  font-size: var(--vscode-font-size);
-                  color: var(--vscode-foreground);
-                  background-color: var(--vscode-editor-background);
-                  padding: 20px;
-                  margin: 0;
-              }
-              .header {
-                  display: flex;
-                  gap: 10px;
-                  margin-bottom: 30px;
-                  padding-bottom: 15px;
-                  border-bottom: 1px solid var(--vscode-panel-border);
-              }
-              .button {
-                  background-color: var(--vscode-button-background);
-                  color: var(--vscode-button-foreground);
-                  border: none;
-                  padding: 10px 20px;
-                  border-radius: 4px;
-                  cursor: pointer;
-                  font-size: 14px;
-                  font-weight: 500;
-              }
-              .button:hover {
-                  background-color: var(--vscode-button-hoverBackground);
-              }
-              .content {
-                  max-width: 1200px;
-              }
-              h1 {
-                  margin: 0 0 20px 0;
-                  font-size: 24px;
-                  font-weight: 600;
-              }
-          </style>
-      </head>
-      <body>
-          <h1>VRM File Editor</h1>
-          
-          <div class="header">
-              <button class="button" onclick="openHtml()">Open HTML Editor</button>
-              <button class="button" onclick="openJs()">Open JavaScript Editor</button>
-          </div>
-          
-          <div class="content">
-              ${this.visualEditor?.generateVisualEditorHtml() || ''}
-          </div>
-          
-          <script>
-              const vscode = acquireVsCodeApi();
-              
-              function openHtml() {
-                  vscode.postMessage({ command: 'openHtml' });
-              }
-              
-              function openJs() {
-                  vscode.postMessage({ command: 'openJs' });
-              }
-              
-              // Initialize the visual editor with components (including section info)
-              window.addEventListener('DOMContentLoaded', function() {
-                  const components = ${JSON.stringify(allComponents)};
-                  if (typeof renderComponents === 'function') {
-                      renderComponents(components);
-                  }
-              });
-              
-              // Handle messages from extension
-              window.addEventListener('message', event => {
-                  const message = event.data;
-                  switch (message.type) {
-                      case 'updateComponents':
-                          if (typeof renderComponents === 'function') {
-                              renderComponents(message.components);
-                          }
-                          break;
-                  }
-              });
-          </script>
-      </body>
-      </html>`;
-  }
-
+        // Parse components from VRM file with section information
+        const vrmContent = this.activeDocument?.getDocument().getText() || '';
+        
+        // Parse both sections separately to maintain section identity
+        const preprocMatch = vrmContent.match(/<preproc>([\s\S]*?)<\/preproc>/);
+        const postprocMatch = vrmContent.match(/<postproc>([\s\S]*?)<\/postproc>/);
+        
+        let allComponents: any[] = [];
+        
+        if (this.visualEditor) {
+            if (preprocMatch) {
+                const preprocComponents = this.visualEditor.parseComponentSection(preprocMatch[1], 'preproc');
+                allComponents = allComponents.concat(preprocComponents);
+            }
+            
+            if (postprocMatch) {
+                const postprocComponents = this.visualEditor.parseComponentSection(postprocMatch[1], 'postproc');
+                allComponents = allComponents.concat(postprocComponents);
+            }
+        }
+        
+        return `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>VRM Editor</title>
+            <style>
+                body {
+                    font-family: var(--vscode-font-family);
+                    font-size: var(--vscode-font-size);
+                    color: var(--vscode-foreground);
+                    background-color: var(--vscode-editor-background);
+                    padding: 20px;
+                    margin: 0;
+                }
+                .header {
+                    display: flex;
+                    gap: 10px;
+                    margin-bottom: 30px;
+                    padding-bottom: 15px;
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                }
+                .button {
+                    background-color: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    padding: 10px 20px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 14px;
+                    font-weight: 500;
+                }
+                .button:hover {
+                    background-color: var(--vscode-button-hoverBackground);
+                }
+                .content {
+                    max-width: 1200px;
+                }
+                h1 {
+                    margin: 0 0 20px 0;
+                    font-size: 24px;
+                    font-weight: 600;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>VRM File Editor</h1>
+            
+            <div class="header">
+                <button class="button" onclick="openHtml()">Open HTML Editor</button>
+                <button class="button" onclick="openJs()">Open JavaScript Editor</button>
+            </div>
+            
+            <div class="content">
+                ${this.visualEditor?.generateVisualEditorHtml() || ''}
+            </div>
+            
+            <script>
+                const vscode = acquireVsCodeApi();
+                
+                function openHtml() {
+                    vscode.postMessage({ command: 'openHtml' });
+                }
+                
+                function openJs() {
+                    vscode.postMessage({ command: 'openJs' });
+                }
+                
+                // Initialize the visual editor with components (including section info)
+                window.addEventListener('DOMContentLoaded', function() {
+                    const components = ${JSON.stringify(allComponents)};
+                    if (typeof renderComponents === 'function') {
+                        renderComponents(components);
+                    }
+                });
+                
+                // Handle messages from extension
+                window.addEventListener('message', event => {
+                    const message = event.data;
+                    switch (message.type) {
+                        case 'updateComponents':
+                            if (typeof renderComponents === 'function') {
+                                renderComponents(message.components);
+                            }
+                            break;
+                    }
+                });
+            </script>
+        </body>
+        </html>`;
+    }
+    
     private updateComponent(updatedComponent: any): void {
         if (!this.activeDocument) {
             console.error('No active document for component update');
@@ -770,11 +830,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             this.processPendingUpdates();
         }, this.UPDATE_DEBOUNCE_MS);
     }
-
+    
     private updateComponentInXml(xmlContent: string, updatedComponent: any): string {
-        // This is a simplified approach - in a real implementation you'd want more robust XML manipulation
-        // For now, we'll update the component by finding and replacing the specific component XML
-        
         // Find the component in both preproc and postproc sections
         const preprocMatch = xmlContent.match(/<preproc>([\s\S]*?)<\/preproc>/);
         const postprocMatch = xmlContent.match(/<postproc>([\s\S]*?)<\/postproc>/);
@@ -793,7 +850,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         
         return updatedXml;
     }
-
+    
     private updateComponentInSection(sectionContent: string, updatedComponent: any): string {
         // Find the specific component by ID
         const componentRegex = new RegExp(`<c>\\s*<n>${updatedComponent.n}</n>[\\s\\S]*?</c>`, 'g');
@@ -803,7 +860,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             return this.generateComponentXml(updatedComponent);
         });
     }
-
+    
     private generateComponentXml(component: any): string {
         let xml = `<c>
             <n>${component.n}</n>
@@ -811,58 +868,250 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         
         // Add values section if it exists
         if (component.values) {
-            xml += '\n            <values>';
+            xml += '\n        <values>';
             
-            // Add conditions
-            if (component.values.conditions) {
-                component.values.conditions.forEach((condition: string) => {
-                    xml += `\n                <v><![CDATA[${condition}]]></v>`;
-                });
-            }
+            // Handle different component types with enhanced XML generation
+            xml += this.generateValuesXmlByType(component);
             
-            // Add query
-            if (component.values.query) {
-                xml += `\n                <query><![CDATA[${component.values.query}]]></query>`;
-            }
-            
-            // Add parameters
-            if (component.values.params) {
-                component.values.params.forEach((param: any) => {
-                    xml += `\n                <param>
-                    <n>${param.name}</n>
-                    <t>${param.type}</t>
-                    <v><![CDATA[${param.value}]]></v>
-                </param>`;
-                });
-            }
-            
-            xml += '\n            </values>';
+            xml += '\n        </values>';
         }
         
         // Add connections
-        component.j.forEach((jump: number) => {
-            if (jump > 0) {
-                xml += `\n            <j>${jump}</j>`;
-            } else {
-                xml += '\n            <j/>';
-            }
-        });
+        if (component.j && component.j.length > 0) {
+            component.j.forEach((jump: number) => {
+                if (jump > 0) {
+                    xml += `\n        <j>${jump}</j>`;
+                } else {
+                    xml += '\n        <j />';
+                }
+            });
+        } else {
+            // Default empty connections
+            xml += '\n        <j />';
+            xml += '\n        <j />';
+        }
         
         // Add position and metadata
-        xml += `\n            <x>${component.x}</x>
-            <y>${component.y}</y>
-            <c>${component.c}</c>
-            <wp>${component.wp ? '1' : '0'}</wp>
-        </c>`;
+        xml += `\n        <x>${component.x}</x>`;
+        xml += `\n        <y>${component.y}</y>`;
+        
+        // Comment
+        if (component.c) {
+            xml += `\n        <c>${component.c}</c>`;
+        } else {
+            xml += '\n        <c />';
+        }
+        
+        // Watchpoint
+        if (component.wp === null) {
+            xml += '\n        <wp />';
+        } else {
+            xml += `\n        <wp>${component.wp ? '1' : '0'}</wp>`;
+        }
+        
+        xml += '\n    </c>';
         
         return xml;
     }
-
+    
+    private generateValuesXmlByType(component: any): string {
+        if (!component.values) return '';
+        
+        switch (component.t) {
+            case 'CSF':
+                return this.generateCsfValuesXml(component.values);
+            case 'SQLTRN':
+                return this.generateSqlTrnValuesXml(component.values);
+            case 'MATH':
+                return this.generateMathValuesXml(component.values);
+            case 'TEMPLATE':
+                return this.generateTemplateValuesXml(component.values);
+            case 'INSERTUPDATEQUERY':
+            case 'SELECTQUERY':
+                return this.generateQueryValuesXml(component.values);
+            case 'SCRIPT':
+                return this.generateScriptValuesXml(component.values);
+            case 'ERROR':
+                return this.generateErrorValuesXml(component.values);
+            case 'IF':
+                return this.generateIfValuesXml(component.values);
+            case 'SET':
+                return this.generateSetValuesXml(component.values);
+            case 'EXTERNAL':
+                return this.generateExternalValuesXml(component.values);
+            default:
+                return this.generateLegacyValuesXml(component.values);
+        }
+    }
+    
+    private generateCsfValuesXml(values: any): string {
+        let xml = '';
+        xml += `\n            <n>${values.functionName || ''}</n>`;
+        if (values.returnValue) {
+            xml += `\n            <v><![CDATA[${values.returnValue}]]></v>`;
+        } else {
+            xml += '\n            <v />';
+        }
+        
+        if (values.functionParams) {
+            values.functionParams.forEach((param: any) => {
+                xml += `\n            <n>${param.label || ''}</n>`;
+                if (param.value) {
+                    xml += `\n            <v><![CDATA[${param.value}]]></v>`;
+                } else {
+                    xml += '\n            <v />';
+                }
+            });
+        }
+        return xml;
+    }
+    
+    private generateSqlTrnValuesXml(values: any): string {
+        let xml = '';
+        if (values.transactionName) {
+            xml += `\n            <n>${values.transactionName}</n>`;
+        } else {
+            xml += '\n            <n />';
+        }
+        if (values.transactionType) {
+            xml += `\n            <t>${values.transactionType}</t>`;
+        } else {
+            xml += '\n            <t />';
+        }
+        return xml;
+    }
+    
+    private generateMathValuesXml(values: any): string {
+        let xml = '';
+        xml += `\n            <n>${values.mathName || ''}</n>`;
+        xml += `\n            <f>${values.mathFormat || ''}</f>`;
+        xml += `\n            <v>${values.mathParam || ''}</v>`;
+        return xml;
+    }
+    
+    private generateTemplateValuesXml(values: any): string {
+        let xml = '';
+        xml += `\n            <n>${values.templateName || ''}</n>`;
+        xml += `\n            <t>${values.templateTarget || ''}</t>`;
+        return xml;
+    }
+    
+    private generateQueryValuesXml(values: any): string {
+        let xml = '';
+        if (values.query) {
+            xml += `\n            <query><![CDATA[${values.query}]]></query>`;
+        } else {
+            xml += '\n            <query />';
+        }
+        
+        if (values.params) {
+            values.params.forEach((param: any) => {
+                xml += '\n            <param>';
+                xml += `\n                <n>${param.name}</n>`;
+                xml += `\n                <t>${param.type}</t>`;
+                xml += `\n                <v><![CDATA[${param.value}]]></v>`;
+                xml += '\n            </param>';
+            });
+        }
+        return xml;
+    }
+    
+    private generateScriptValuesXml(values: any): string {
+        let xml = '';
+        if (values.script) {
+            xml += `\n            <v><![CDATA[${values.script}]]></v>`;
+        } else {
+            xml += '\n            <v />';
+        }
+        xml += `\n            <lng>${values.language || ''}</lng>`;
+        return xml;
+    }
+    
+    private generateErrorValuesXml(values: any): string {
+        if (values.errorMessage) {
+            return `\n            <v><![CDATA[${values.errorMessage}]]></v>`;
+        } else {
+            return '\n            <v />';
+        }
+    }
+    
+    private generateIfValuesXml(values: any): string {
+        if (values.condition) {
+            return `\n            <v><![CDATA[${values.condition}]]></v>`;
+        } else {
+            return '\n            <v><![CDATA[]]></v>';
+        }
+    }
+    
+    private generateSetValuesXml(values: any): string {
+        let xml = '';
+        if (values.variables) {
+            values.variables.forEach((variable: any) => {
+                if (variable.name) {
+                    xml += `\n            <n><![CDATA[${variable.name}]]></n>`;
+                } else {
+                    xml += '\n            <n />';
+                }
+                if (variable.value) {
+                    xml += `\n            <v><![CDATA[${variable.value}]]></v>`;
+                } else {
+                    xml += '\n            <v />';
+                }
+            });
+        }
+        return xml;
+    }
+    
+    private generateExternalValuesXml(values: any): string {
+        if (values.externalValue) {
+            return `\n            <v>${values.externalValue}</v>`;
+        } else {
+            return '\n            <v />';
+        }
+    }
+    
+    private generateLegacyValuesXml(values: any): string {
+        let xml = '';
+        
+        // Legacy conditions
+        if (values.conditions) {
+            values.conditions.forEach((condition: string) => {
+                xml += `\n            <v><![CDATA[${condition}]]></v>`;
+            });
+        }
+        
+        // Legacy query
+        if (values.query) {
+            xml += `\n            <query><![CDATA[${values.query}]]></query>`;
+        }
+        
+        // Legacy parameters
+        if (values.params) {
+            values.params.forEach((param: any) => {
+                xml += '\n            <param>';
+                xml += `\n                <n>${param.name}</n>`;
+                xml += `\n                <t>${param.type}</t>`;
+                xml += `\n                <v><![CDATA[${param.value}]]></v>`;
+                xml += '\n            </param>';
+            });
+        }
+        
+        return xml;
+    }
+    
     private updateWebview(webview: vscode.Webview): void {
         // Parse components and update visual editor
         if (this.activeDocument && this.visualEditor) {
             const vrmContent = this.activeDocument.getDocument().getText();
             const components = this.visualEditor.parseComponents(vrmContent);
+            
+            // Send update message to the webview
+            webview.postMessage({
+                type: 'updateComponents',
+                components: components
+            });
+            
+            // Also update the visual editor's internal state
             this.visualEditor.updateWebview(components);
         }
     }

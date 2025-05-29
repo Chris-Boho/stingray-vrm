@@ -6,6 +6,8 @@ import { RenderingManager } from './modules/RenderingManager';
 import { ComponentEditor } from './modules/ComponentEditor';
 import { KeyboardManager } from './modules/KeyboardManager';
 import { ConnectionManager } from './modules/ConnectionManager';
+import { ComponentPalette } from './modules/ComponentPalette';
+import { ComponentTemplates } from '../ComponentTemplate';
 
 export function getEditorScripts(): string {
     return `
@@ -29,6 +31,15 @@ export function getEditorScripts(): string {
         
         ${ConnectionManager.inject()}
         
+        ${ComponentPalette.inject()}
+        
+        // =================================================================
+        // Component Templates - Make available globally
+        // =================================================================
+        
+        // Inject ComponentTemplates class into window for use by other modules
+        window.ComponentTemplates = (${ComponentTemplates.toString()});
+        
         // =================================================================
         // Initialization
         // =================================================================
@@ -41,6 +52,11 @@ export function getEditorScripts(): string {
             window.keyboardManager.initializeDragPrevention();
             window.keyboardManager.initializeKeyboardHandlers();
             window.keyboardManager.initializeGlobalClickHandler();
+            
+            // Initialize component palette
+            if (window.componentPalette) {
+                window.componentPalette.initializePalette();
+            }
         });
     `;
 }

@@ -3,6 +3,8 @@ import {
     IContextMenuManager,
     IStateManager,
     ISelectionManager,
+    IRenderingManager,
+    VrmComponent,
     CustomWindow 
 } from '../../types';
 
@@ -156,86 +158,121 @@ export class ContextMenuManager implements IContextMenuManager {
                 ]
             },
             {
-                text: 'Insert',
+                text: 'Insert Component',
                 icon: '➕',
                 hasSubmenu: true,
                 submenuItems: [
                     {
-                        text: 'Insert / Update Component',
-                        icon: '📝',
-                        action: () => {
-                            this.insertComponent('INSERTUPDATEQUERY', 'Insert/Update Component');
-                        }
+                        text: 'Database Components',
+                        icon: '🗄️',
+                        hasSubmenu: true,
+                        submenuItems: [
+                            {
+                                text: 'SQL Transaction',
+                                icon: '🔄',
+                                action: () => {
+                                    this.insertComponent('SQLTRN', 'SQL Transaction');
+                                }
+                            },
+                            {
+                                text: 'Select Query',
+                                icon: '🔍',
+                                action: () => {
+                                    this.insertComponent('SELECTQUERY', 'Select Query');
+                                }
+                            },
+                            {
+                                text: 'Insert/Update Query',
+                                icon: '📝',
+                                action: () => {
+                                    this.insertComponent('INSERTUPDATEQUERY', 'Insert/Update Query');
+                                }
+                            }
+                        ]
                     },
                     {
-                        text: 'Select Query Component',
-                        icon: '🔍',
-                        action: () => {
-                            this.insertComponent('SELECTQUERY', 'Select Query Component');
-                        }
-                    },
-                    {
-                        text: 'SQL Transaction Component',
-                        icon: '🔄',
-                        action: () => {
-                            this.insertComponent('TRANSACTION', 'SQL Transaction Component');
-                        }
-                    },
-                    {
-                        text: 'Script Function Component',
-                        icon: '⚙️',
-                        action: () => {
-                            this.insertComponent('SCRIPT', 'Script Function Component');
-                        }
-                    },
-                    {
-                        text: 'Scripting Component',
+                        text: 'Script Components',
                         icon: '💻',
-                        action: () => {
-                            this.insertComponent('SCRIPTING', 'Scripting Component');
-                        }
+                        hasSubmenu: true,
+                        submenuItems: [
+                            {
+                                text: 'Script Function',
+                                icon: '⚙️',
+                                action: () => {
+                                    this.insertComponent('CSF', 'Script Function');
+                                }
+                            },
+                            {
+                                text: 'Script Block',
+                                icon: '💻',
+                                action: () => {
+                                    this.insertComponent('SCRIPT', 'Script Block');
+                                }
+                            }
+                        ]
                     },
                     {
-                        text: 'Error Component',
-                        icon: '⚠️',
-                        action: () => {
-                            this.insertComponent('ERROR', 'Error Component');
-                        }
+                        text: 'Control Components',
+                        icon: '🎛️',
+                        hasSubmenu: true,
+                        submenuItems: [
+                            {
+                                text: 'Condition (IF)',
+                                icon: '❓',
+                                action: () => {
+                                    this.insertComponent('IF', 'Condition (IF)');
+                                }
+                            },
+                            {
+                                text: 'Error Component',
+                                icon: '⚠️',
+                                action: () => {
+                                    this.insertComponent('ERROR', 'Error Component');
+                                }
+                            }
+                        ]
                     },
                     {
-                        text: 'IF Component',
-                        icon: '❓',
-                        action: () => {
-                            this.insertComponent('IF', 'IF Component');
-                        }
-                    },
-                    {
-                        text: 'Math Component',
-                        icon: '🔢',
-                        action: () => {
-                            this.insertComponent('MATH', 'Math Component');
-                        }
-                    },
-                    {
-                        text: 'Multi-Set Component',
+                        text: 'Data Components',
                         icon: '📊',
-                        action: () => {
-                            this.insertComponent('MULTISET', 'Multi-Set Component');
-                        }
+                        hasSubmenu: true,
+                        submenuItems: [
+                            {
+                                text: 'Multi-Set Variables',
+                                icon: '📊',
+                                action: () => {
+                                    this.insertComponent('SET', 'Multi-Set Variables');
+                                }
+                            },
+                            {
+                                text: 'Math Operation',
+                                icon: '🔢',
+                                action: () => {
+                                    this.insertComponent('MATH', 'Math Operation');
+                                }
+                            }
+                        ]
                     },
                     {
-                        text: 'External Component',
-                        icon: '🌐',
-                        action: () => {
-                            this.insertComponent('EXTERNAL', 'External Component');
-                        }
-                    },
-                    {
-                        text: 'Template Component',
-                        icon: '📋',
-                        action: () => {
-                            this.insertComponent('TEMPLATE', 'Template Component');
-                        }
+                        text: 'Integration Components',
+                        icon: '🔗',
+                        hasSubmenu: true,
+                        submenuItems: [
+                            {
+                                text: 'External Call',
+                                icon: '🌐',
+                                action: () => {
+                                    this.insertComponent('EXTERNAL', 'External Call');
+                                }
+                            },
+                            {
+                                text: 'Template',
+                                icon: '📋',
+                                action: () => {
+                                    this.insertComponent('TEMPLATE', 'Template');
+                                }
+                            }
+                        ]
                     }
                 ]
             }
@@ -334,7 +371,7 @@ export class ContextMenuManager implements IContextMenuManager {
             
             menuItem.appendChild(rightContent);
             
-            // Hover effects (only for visual feedback, not for showing submenus)
+            // Hover effects
             menuItem.onmouseover = () => {
                 // Remove hover from siblings
                 Array.from(parentElement.children).forEach(child => {
@@ -353,7 +390,7 @@ export class ContextMenuManager implements IContextMenuManager {
                 menuItem.style.color = 'var(--vscode-menu-foreground)';
             };
             
-            // Click handler - show submenu on click for main menu items, execute action for submenu items
+            // Click handler
             if (item.hasSubmenu && level === 0) {
                 // Main menu items with submenus - show submenu on click
                 menuItem.onclick = (e) => {
@@ -373,6 +410,26 @@ export class ContextMenuManager implements IContextMenuManager {
                     } else {
                         this.showSubmenu(menuItem, item.submenuItems, level);
                     }
+                };
+            } else if (item.hasSubmenu) {
+                // Nested submenu items - show on hover
+                menuItem.onmouseover = () => {
+                    // Hide submenus from siblings
+                    Array.from(parentElement.children).forEach(child => {
+                        if (child !== menuItem && child.classList.contains('menu-item')) {
+                            this.hideSubmenus(child as HTMLElement);
+                        }
+                    });
+                    
+                    // Show submenu for this item
+                    const existingSubmenu = menuItem.querySelector('.submenu');
+                    if (!existingSubmenu) {
+                        this.showSubmenu(menuItem, item.submenuItems, level);
+                    }
+                    
+                    // Apply hover style
+                    menuItem.style.backgroundColor = 'var(--vscode-menu-selectionBackground)';
+                    menuItem.style.color = 'var(--vscode-menu-selectionForeground)';
                 };
             } else if (item.action) {
                 // Items with actions - execute action on click
@@ -439,10 +496,6 @@ export class ContextMenuManager implements IContextMenuManager {
         }
     }
     
-    private isElementInSubmenu(element: HTMLElement, parentItem: HTMLElement): boolean {
-        return parentItem.contains(element);
-    }
-    
     private isClickInsideAnyMenu(target: Node): boolean {
         let element = target as HTMLElement;
         while (element) {
@@ -455,17 +508,91 @@ export class ContextMenuManager implements IContextMenuManager {
     }
     
     private insertComponent(componentType: string, componentName: string): void {
-        // TODO: Implement component insertion logic
         console.log(`Insert ${componentType} component: ${componentName}`);
-        this.showTemporaryMessage(`Inserting ${componentName} component...`);
         this.closeContextMenu();
         
-        // For now, just show a message. Later this will:
-        // 1. Create a new component with unique ID
-        // 2. Position it at the context menu location
-        // 3. Add it to the current section (preproc/postproc)
-        // 4. Update the VRM file
-        // 5. Re-render the canvas
+        const stateManager: IStateManager = window.stateManager;
+        
+        try {
+            // Get context menu position for component placement
+            const contextPos = stateManager.getContextMenuPosition();
+            
+            // Snap to grid
+            const snapped = stateManager.snapToGrid(contextPos.x, contextPos.y);
+            
+            // Get current section and existing components
+            const currentSection = stateManager.getActiveTab() as 'preproc' | 'postproc';
+            const existingComponents = currentSection === 'preproc' ? 
+                stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+
+            // Access ComponentTemplates from window (it should be available in the context)
+            const ComponentTemplates = (window as any).ComponentTemplates;
+            if (!ComponentTemplates) {
+                throw new Error('ComponentTemplates not available - make sure it is properly injected');
+            }
+
+            // Create new component using template
+            const newComponent = ComponentTemplates.createComponent(
+                componentType, 
+                currentSection, 
+                existingComponents, 
+                snapped.x, 
+                snapped.y
+            );
+
+            console.log('Created new component via context menu:', newComponent);
+
+            // Add to state
+            if (currentSection === 'preproc') {
+                stateManager.getPreprocComponents().push(newComponent);
+            } else {
+                stateManager.getPostprocComponents().push(newComponent);
+            }
+
+            // Update component counts
+            stateManager.updateComponentCounts();
+
+            // Re-render the current section
+            const renderingManager: IRenderingManager = window.renderingManager;
+            const canvasId = currentSection + 'Canvas';
+            const components = currentSection === 'preproc' ? 
+                stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+            
+            renderingManager.renderComponentSection(components, canvasId);
+
+            // Send to extension to update VRM file
+            this.saveNewComponent(newComponent);
+
+            // Show success message
+            this.showTemporaryMessage(`Added ${componentName} #${newComponent.n}`);
+
+        } catch (error) {
+            console.error('Error creating component:', error);
+            this.showTemporaryMessage(`Error creating ${componentName}: ${error}`);
+        }
+    }
+
+    private saveNewComponent(component: VrmComponent): void {
+        // Get VS Code API safely
+        let vscode = (window as any).vscode;
+        if (!vscode && (window as any).acquireVsCodeApi) {
+            try {
+                vscode = (window as any).acquireVsCodeApi();
+                (window as any).vscode = vscode;
+            } catch (error) {
+                console.warn('VS Code API already acquired, using existing instance');
+                vscode = (window as any).vscode;
+            }
+        }
+
+        if (vscode && vscode.postMessage) {
+            vscode.postMessage({
+                command: 'addComponent',
+                component: component
+            });
+        } else {
+            console.warn('VS Code API not available, cannot save new component');
+        }
     }
 
     public closeContextMenu(): void {
