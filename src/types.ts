@@ -7,35 +7,87 @@ export interface VsCodeApi {
     setState(state: any): void;
 }
 
-// Component interface
+// Component interface (unified - removed duplicate)
 export interface VrmComponent {
     n: number;           // Component number/ID
-    t: string;           // Component type (IF, SELECTQUERY, etc.)
+    t: string;           // Component type
     values?: ComponentValues;
-    j: number[];         // Jump/connection targets
+    j: number[];         // Jump/connection targets [primary, secondary]
     x: number;           // X coordinate
     y: number;           // Y coordinate
     c: string;           // Comment/description
-    wp: boolean;         // Watchpoint flag
+    wp: boolean | null;  // Watchpoint flag: true/false for set values, null for <wp/> (unset)
     section: 'preproc' | 'postproc';
-}
-
-export interface ComponentValues {
-    conditions?: string[];
-    query?: string;
-    params?: ComponentParameter[];
-}
-
-export interface ComponentParameter {
-    name: string;
-    type: 'STRING' | 'INTEGER' | 'BOOLEAN' | 'DECIMAL';
-    value: string;
 }
 
 // Position interfaces
 export interface Position {
     x: number;
     y: number;
+}
+
+// =================================================================
+// ENHANCED COMPONENT VALUES INTERFACE  
+// =================================================================
+
+export interface ComponentValues {
+    // Common fields used by multiple component types
+    conditions?: string[];  // Legacy IF conditions (keeping for backward compatibility)
+    query?: string;        // INSERTUPDATEQUERY, SELECTQUERY
+    params?: ComponentParameter[];  // INSERTUPDATEQUERY, SELECTQUERY parameters
+    
+    // Component-specific values based on your documentation
+    
+    // CSF (Script Function) Component - alternating n/v pairs
+    functionName?: string;     // First n tag
+    returnValue?: string;      // First v tag  
+    functionParams?: CsfParameter[];  // Additional n/v pairs
+    
+    // SQLTRN (SQL Transaction) Component
+    transactionName?: string;  // n tag (can be empty)
+    transactionType?: string;  // t tag (Begin/Commit/Rollback)
+    
+    // MATH Component
+    mathName?: string;         // n tag
+    mathFormat?: string;       // f tag (INTEGER, LONGDATETIME, etc.)
+    mathParam?: string;        // v tag
+    
+    // TEMPLATE Component  
+    templateName?: string;     // n tag
+    templateTarget?: string;   // t tag
+    
+    // SCRIPT Component
+    script?: string;           // v tag content
+    language?: string;         // lng tag (Pascal)
+    
+    // ERROR Component
+    errorMessage?: string;     // v tag content
+    
+    // IF Component
+    condition?: string;        // v tag content (single condition)
+    
+    // SET (Multi-Set) Component - multiple n/v pairs
+    variables?: SetVariable[]; // Array of name/value pairs
+    
+    // EXTERNAL Component
+    externalValue?: string;    // v tag (displayed as "Rule name" in UI)
+}
+
+// Parameter interfaces
+export interface ComponentParameter {
+    name: string;
+    type: 'BOOLEAN' | 'CURRENCY' | 'DATETIME' | 'FLOAT' | 'INTEGER' | 'STRING' | 'SECURE';
+    value: string;
+}
+
+export interface CsfParameter {
+    label: string;    // n tag
+    value: string;    // v tag
+}
+
+export interface SetVariable {
+    name: string;     // n tag
+    value: string;    // v tag
 }
 
 // Handler types for drag operations
@@ -145,7 +197,7 @@ export interface IDragDropManager {
     startMultiDrag(e: MouseEvent, clickedComponent: VrmComponent): void;
 }
 
-// Component Editor interface
+// Component Editor interface - Fixed with all required methods
 export interface IComponentEditor {
     showComponentDetails(component: VrmComponent): void;
     showMultiSelectionDetails(): void;
@@ -153,6 +205,10 @@ export interface IComponentEditor {
     closeComponentEditor(): void;
     addParameter(): void;
     removeParameter(index: number): void;
+    addCsfParameter(): void;
+    removeCsfParameter(index: number): void;
+    addSetVariable(): void;
+    removeSetVariable(index: number): void;
     saveComponentChanges(componentId: number): void;
 }
 
@@ -216,8 +272,12 @@ export interface CustomWindow extends Window {
     closeComponentEditor?: () => void;
     addParameter?: () => void;
     removeParameter?: (index: number) => void;
+    addCsfParameter?: () => void;
+    removeCsfParameter?: (index: number) => void;
+    addSetVariable?: () => void;
+    removeSetVariable?: (index: number) => void;
     saveComponentChanges?: (componentId: number) => void;
     
     // Temporary storage
-    currentEditingComponent?: VrmComponent;
+    currentEditingComponent?: VrmComponent | null;
 }
