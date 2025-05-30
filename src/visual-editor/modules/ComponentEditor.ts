@@ -1155,7 +1155,9 @@ export class ComponentEditor implements IComponentEditor {
         
         html += `
                 </div>
-                <button onclick="addCsfParameter()">Add Parameter</button>
+                <div class="add-button-container">
+                    <button class="add-item-btn" onclick="addCsfParameter()">Add Parameter</button>
+                </div>
             </div>
         `;
         
@@ -1266,7 +1268,9 @@ export class ComponentEditor implements IComponentEditor {
         
         html += `
                 </div>
-                <button onclick="addParameter()">Add Parameter</button>
+                <div class="add-button-container">
+                    <button class="add-item-btn" onclick="addParameter()">Add Parameter</button>
+                </div>
             </div>
         `;
         
@@ -1339,7 +1343,9 @@ export class ComponentEditor implements IComponentEditor {
         
         html += `
                 </div>
-                <button onclick="addSetVariable()">Add Variable</button>
+                <div class="add-button-container">
+                    <button class="add-item-btn" onclick="addSetVariable()">Add Variable</button>
+                </div>
             </div>
         `;
         
@@ -1404,7 +1410,9 @@ export class ComponentEditor implements IComponentEditor {
                 
                 html += `
                         </div>
-                        <button onclick="addParameter()">Add Parameter</button>
+                        <div class="add-button-container">
+                            <button class="add-item-btn" onclick="addParameter()">Add Parameter</button>
+                        </div>
                     </div>
                 `;
             }

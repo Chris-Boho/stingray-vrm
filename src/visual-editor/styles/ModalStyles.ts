@@ -69,6 +69,26 @@ export function getModalStyles(): string {
         .close-btn:hover {
             background-color: var(--vscode-toolbar-hoverBackground);
         }
+            
+        .add-item-btn {
+            background-color: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            padding: 8px 16px;
+            width: auto;
+            max-width: 200px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .add-button-container {
+            display: flex;
+            justify-content: flex-start;
+            margin-top: 12px;
+            padding-top: 8px;
+            border-top: 1px solid var(--vscode-panel-border);
+        }
+
 
         /* FIXED: Modal body optimized for Monaco editors */
         .modal-body {
