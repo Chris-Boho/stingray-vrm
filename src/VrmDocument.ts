@@ -24,14 +24,16 @@ export class VrmDocument {
         return this.parser.extractJavaScript();
     }
 
-    public updateHtmlContent(newHtml: string): void {
+    public updateHtmlContent(newHtml: string): string {
         const updatedContent = this.parser.updateHtml(newHtml);
         this.applyEdit(updatedContent);
+        return updatedContent;
     }
 
-    public updateJsContent(newJs: string): void {
+    public updateJsContent(newJs: string): string {
         const updatedContent = this.parser.updateJavaScript(newJs);
         this.applyEdit(updatedContent);
+        return updatedContent;
     }
 
     private applyEdit(newContent: string): void {

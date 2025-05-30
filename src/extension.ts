@@ -23,13 +23,13 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(registration);
 
     // Register commands
-    const openHtmlCommand = vscode.commands.registerCommand('vrmEditor.openHtml', () => {
-        provider.openHtmlEditor();
-    });
+    // const openHtmlCommand = vscode.commands.registerCommand('vrmEditor.openHtml', () => {
+    //     provider.openHtmlEditor();
+    // });
 
-    const openJsCommand = vscode.commands.registerCommand('vrmEditor.openJs', () => {
-        provider.openJsEditor();
-    });
+    // const openJsCommand = vscode.commands.registerCommand('vrmEditor.openJs', () => {
+    //     provider.openJsEditor();
+    // });
 
     const openVrmEditorCommand = vscode.commands.registerCommand('vrmEditor.openVrmEditor', async () => {
         const activeEditor = vscode.window.activeTextEditor;
@@ -40,7 +40,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    context.subscriptions.push(openHtmlCommand, openJsCommand, openVrmEditorCommand);
+    context.subscriptions.push(openVrmEditorCommand);
 }
 
 export function deactivate() {}

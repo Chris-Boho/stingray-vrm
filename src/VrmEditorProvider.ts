@@ -1,1116 +1,533 @@
+// VrmEditorProvider.ts - Complete implementation with component deletion support
+
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { ComponentXmlGenerator } from './visual-editor/ComponentXmlGenerator';
+import { HtmlGenerator } from './visual-editor/HtmlGenerator';
+import { ComponentParser } from './visual-editor/ComponentParser';
 import { VrmDocument } from './VrmDocument';
-import { VrmParser } from './VrmParser';
-import { VrmVisualEditor } from './VrmVisualEditor';
+import { VrmComponent } from './types';
 
 export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
-    private static readonly viewType = 'vrmEditor.vrm';
-    private activeDocument: VrmDocument | undefined;
-    private tempFiles: Map<string, { htmlPath?: string; jsPath?: string; watchers: vscode.FileSystemWatcher[] }> = new Map();
-    private visualEditor: VrmVisualEditor | undefined;
-    
-    // Add batching mechanism
-    private pendingUpdates: Map<number, any> = new Map();
-    private updateTimeout: NodeJS.Timeout | undefined;
-    private readonly UPDATE_DEBOUNCE_MS = 100;
+    private static readonly viewType = 'vrmEditor.vrmEditor';
+    private tempFiles: Map<string, string[]> = new Map();
+    private tempFileWatchers: Map<string, vscode.Disposable[]> = new Map();
 
-    constructor(private readonly context: vscode.ExtensionContext) {
-        // Note: Removed cleanup on extension deactivate to preserve temp files
-        // Temp files are only cleaned up when individual VRM files are closed
+    constructor(private context: vscode.ExtensionContext) {}
+
+    public static register(context: vscode.ExtensionContext): vscode.Disposable {
+        const provider = new VrmEditorProvider(context);
+        const providerRegistration = vscode.window.registerCustomEditorProvider(
+            VrmEditorProvider.viewType, 
+            provider,
+            {
+                webviewOptions: {
+                    retainContextWhenHidden: true,
+                },
+                supportsMultipleEditorsPerDocument: false,
+            }
+        );
+        return providerRegistration;
     }
 
     public async resolveCustomTextEditor(
         document: vscode.TextDocument,
         webviewPanel: vscode.WebviewPanel,
-        token: vscode.CancellationToken
+        _token: vscode.CancellationToken
     ): Promise<void> {
-        console.log('VRM Editor resolveCustomTextEditor called for:', document.uri.toString());
-        
-        // Create VRM document wrapper
-        this.activeDocument = new VrmDocument(document);
-
-        // Initialize visual editor
-        this.visualEditor = new VrmVisualEditor(webviewPanel.webview);
-
-        // Setup webview
+        // Set up webview options
         webviewPanel.webview.options = {
             enableScripts: true,
+            localResourceRoots: [
+                this.context.extensionUri
+            ]
         };
 
-        webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
-
-        // Handle messages from webview
+        // Set up message handling from webview
         webviewPanel.webview.onDidReceiveMessage(
-            message => {
+            async (message) => {
+                console.log('Received message:', message.command);
+                
                 switch (message.command) {
                     case 'openHtml':
-                        this.openHtmlEditor();
+                        await this.openHtmlEditor(document);
                         break;
+                    
                     case 'openJs':
-                        this.openJsEditor();
+                        await this.openJsEditor(document);
                         break;
+                    
                     case 'updateComponent':
-                        this.updateComponent(message.component);
+                        await this.updateComponent(document, message.component);
                         break;
-                    case 'updateComponents':
-                        this.updateComponents(message.components);
-                        break;
+                    
                     case 'addComponent':
-                        this.addComponent(message.component);
+                        await this.addComponent(document, message.component);
                         break;
+                    
+                    case 'deleteComponent':
+                        await this.deleteComponent(document, message.component);
+                        break;
+                    
+                    default:
+                        console.warn('Unknown command:', message.command);
                 }
             },
             undefined,
             this.context.subscriptions
         );
 
-        // Update webview when document changes
+        // Set up document change listener to update webview
         const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.toString() === document.uri.toString()) {
-                this.activeDocument = new VrmDocument(e.document);
-                this.updateWebview(webviewPanel.webview);
+                // Use setTimeout to avoid blocking the UI thread
+                setTimeout(() => {
+                    this.updateWebview(webviewPanel, document);
+                }, 100);
             }
         });
 
-        // Clean up temp files when webview is disposed (in resolveCustomTextEditor method)
-        webviewPanel.onDidDispose(() => {
-            changeDocumentSubscription.dispose();
-            
-            // Enhanced cleanup - this ensures cleanup happens when VRM tab is closed
-            this.closeVrmEditorsAndCleanup(document.uri.fsPath).catch(error => {
-                console.error('Error during VRM cleanup:', error);
-            });
-        });
+        // Clean up temp files and watchers when editor is disposed
+        webviewPanel.onDidDispose(
+            () => {
+                this.cleanupTempFiles(document.uri.fsPath);
+                this.cleanupWatchers(document.uri.fsPath);
+                changeDocumentSubscription.dispose();
+            },
+            null,
+            this.context.subscriptions
+        );
 
-        this.updateWebview(webviewPanel.webview);
+        // Initialize webview content
+        await this.updateWebview(webviewPanel, document);
     }
 
-    private addComponent(newComponent: any): void {
-        if (!this.activeDocument) {
-            console.error('No active document for adding component');
-            return;
-        }
-
-        console.log(`Adding new component ${newComponent.n} (${newComponent.t}) to ${newComponent.section}`);
-
+    private async updateWebview(webviewPanel: vscode.WebviewPanel, document: vscode.TextDocument): Promise<void> {
         try {
-            // Get current VRM content
-            let currentContent = this.activeDocument.getDocument().getText();
+            console.log('Updating webview for document:', document.uri.fsPath);
             
-            // Generate XML for the new component using the existing method
-            const componentXml = this.generateComponentXml(newComponent);
+            // Parse components from the VRM document
+            const parser = new ComponentParser();
+            const allComponents = parser.parseComponents(document.getText());
             
-            // Add component to the appropriate section
-            currentContent = this.addComponentToSection(currentContent, componentXml, newComponent.section);
+            console.log('Parsed components:', allComponents.length);
             
-            // Apply changes
-            this.applyEditWithRetry(currentContent);
+            // Generate HTML for the webview
+            const htmlGenerator = new HtmlGenerator();
+            webviewPanel.webview.html = htmlGenerator.generateMainWebviewHtml(webviewPanel.webview, allComponents);
             
-            console.log(`Successfully added component ${newComponent.n}`);
+        } catch (error) {
+            console.error('Error updating webview:', error);
+            webviewPanel.webview.html = this.generateErrorHtml(error);
+        }
+    }
+
+    private generateErrorHtml(error: any): string {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        return `
+            <!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>VRM Editor - Error</title>
+                <style>
+                    body {
+                        font-family: var(--vscode-font-family);
+                        color: var(--vscode-foreground);
+                        background-color: var(--vscode-editor-background);
+                        padding: 20px;
+                        line-height: 1.6;
+                    }
+                    .error {
+                        background-color: var(--vscode-inputValidation-errorBackground);
+                        border: 1px solid var(--vscode-inputValidation-errorBorder);
+                        color: var(--vscode-inputValidation-errorForeground);
+                        padding: 16px;
+                        border-radius: 4px;
+                        margin: 20px 0;
+                    }
+                    .error h2 {
+                        margin-top: 0;
+                        color: var(--vscode-errorForeground);
+                    }
+                    pre {
+                        background-color: var(--vscode-textCodeBlock-background);
+                        padding: 12px;
+                        border-radius: 4px;
+                        overflow-x: auto;
+                        font-size: 12px;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>VRM Editor - Error Loading</h1>
+                <div class="error">
+                    <h2>Failed to load VRM editor</h2>
+                    <p>An error occurred while initializing the VRM editor. Please check the console for more details.</p>
+                    <pre>${errorMessage}</pre>
+                </div>
+                <p>Try the following:</p>
+                <ul>
+                    <li>Close and reopen the VRM file</li>
+                    <li>Check that the VRM file has valid XML structure</li>
+                    <li>Report this issue if the problem persists</li>
+                </ul>
+            </body>
+            </html>
+        `;
+    }
+
+    private async openHtmlEditor(document: vscode.TextDocument): Promise<void> {
+        try {
+            console.log('Opening HTML editor for:', document.uri.fsPath);
+            
+            const vrmDocument = new VrmDocument(document);
+            const htmlContent = vrmDocument.getHtmlContent();
+            
+            const tempFilePath = await this.createTempFile(document, 'html', htmlContent);
+            const tempDocument = await vscode.workspace.openTextDocument(tempFilePath);
+            await vscode.window.showTextDocument(tempDocument, { viewColumn: vscode.ViewColumn.Beside });
+            
+            // Set up auto-save watcher for this temp file
+            this.setupTempFileWatcher(tempDocument, document, 'html');
+            
+            vscode.window.showInformationMessage('HTML editor opened. Changes will sync automatically when you save.');
+            
+        } catch (error) {
+            console.error('Error opening HTML editor:', error);
+            vscode.window.showErrorMessage(`Error opening HTML editor: ${error}`);
+        }
+    }
+
+    private async openJsEditor(document: vscode.TextDocument): Promise<void> {
+        try {
+            console.log('Opening JavaScript editor for:', document.uri.fsPath);
+            
+            const vrmDocument = new VrmDocument(document);
+            const jsContent = vrmDocument.getJsContent();
+            
+            const tempFilePath = await this.createTempFile(document, 'js', jsContent);
+            const tempDocument = await vscode.workspace.openTextDocument(tempFilePath);
+            await vscode.window.showTextDocument(tempDocument, { viewColumn: vscode.ViewColumn.Beside });
+            
+            // Set up auto-save watcher for this temp file
+            this.setupTempFileWatcher(tempDocument, document, 'js');
+            
+            vscode.window.showInformationMessage('JavaScript editor opened. Changes will sync automatically when you save.');
+            
+        } catch (error) {
+            console.error('Error opening JavaScript editor:', error);
+            vscode.window.showErrorMessage(`Error opening JavaScript editor: ${error}`);
+        }
+    }
+
+    private async updateComponent(document: vscode.TextDocument, component: VrmComponent): Promise<void> {
+        try {
+            console.log('Updating component:', component.n, 'in section:', component.section);
+            
+            const xmlGenerator = new ComponentXmlGenerator();
+            const updatedContent = xmlGenerator.updateComponentInXml(document.getText(), component);
+            
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(
+                document.uri,
+                new vscode.Range(0, 0, document.lineCount, 0),
+                updatedContent
+            );
+            
+            const success = await vscode.workspace.applyEdit(edit);
+            if (success) {
+                console.log('Component updated successfully');
+            } else {
+                throw new Error('Failed to apply workspace edit');
+            }
+            
+        } catch (error) {
+            console.error('Error updating component:', error);
+            vscode.window.showErrorMessage(`Error updating component: ${error}`);
+        }
+    }
+
+    private async addComponent(document: vscode.TextDocument, component: VrmComponent): Promise<void> {
+        try {
+            console.log('Adding new component:', component.n, 'to section:', component.section);
+            
+            const xmlGenerator = new ComponentXmlGenerator();
+            const componentXml = xmlGenerator.generateComponentXml(component);
+            
+            // Insert the component into the appropriate section
+            let documentContent = document.getText();
+            const sectionTag = component.section === 'preproc' ? 'preproc' : 'postproc';
+            const sectionEndTag = `</${sectionTag}>`;
+            
+            const endIndex = documentContent.indexOf(sectionEndTag);
+            if (endIndex === -1) {
+                throw new Error(`Could not find ${sectionEndTag} tag in document`);
+            }
+            
+            // Insert the new component before the closing tag with proper indentation
+            const beforeEndTag = documentContent.substring(0, endIndex);
+            const afterEndTag = documentContent.substring(endIndex);
+            const newContent = beforeEndTag + '        ' + componentXml + '\n        ' + afterEndTag;
+            
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(
+                document.uri,
+                new vscode.Range(0, 0, document.lineCount, 0),
+                newContent
+            );
+            
+            const success = await vscode.workspace.applyEdit(edit);
+            if (success) {
+                console.log('Component added successfully');
+                vscode.window.showInformationMessage(`Added ${component.t} component #${component.n}`);
+            } else {
+                throw new Error('Failed to apply workspace edit');
+            }
             
         } catch (error) {
             console.error('Error adding component:', error);
-            vscode.window.showErrorMessage(`Failed to add component: ${error}`);
+            vscode.window.showErrorMessage(`Error adding component: ${error}`);
         }
     }
 
-    private addComponentToSection(xmlContent: string, componentXml: string, section: 'preproc' | 'postproc'): string {
-        const sectionRegex = new RegExp(`(<${section}>)(.*?)(<\/${section}>)`, 's');
-        const match = xmlContent.match(sectionRegex);
-        
-        if (match) {
-            const [fullMatch, openTag, sectionContent, closeTag] = match;
-            
-            // Add the new component before the closing tag
-            const updatedSectionContent = sectionContent.trim() + '\n        ' + componentXml + '\n    ';
-            const updatedSection = openTag + updatedSectionContent + closeTag;
-            
-            return xmlContent.replace(fullMatch, updatedSection);
-        } else {
-            // Section doesn't exist, create it
-            const newSection = `    <${section}>\n        ${componentXml}\n    </${section}>`;
-            
-            // Find a good place to insert the section (before </vrm> or after existing sections)
-            const vrmCloseMatch = xmlContent.match(/(\s*)<\/vrm>/);
-            if (vrmCloseMatch) {
-                const indentation = vrmCloseMatch[1] || '';
-                return xmlContent.replace('</vrm>', `${newSection}\n${indentation}</vrm>`);
-            } else {
-                // Fallback: append at the end
-                return xmlContent + '\n' + newSection;
-            }
-        }
-    }
-
-    private updateComponents(updatedComponents: any[]): void {
-        if (!this.activeDocument) {
-            console.error('No active document for batch component update');
-            return;
-        }
-        
-        console.log(`Received batch update for ${updatedComponents.length} components`);
-        
-        // Add all components to pending updates (this will overwrite any existing pending updates for the same components)
-        updatedComponents.forEach(component => {
-            this.pendingUpdates.set(component.n, component);
-        });
-        
-        // Clear existing timeout and set a new one
-        if (this.updateTimeout) {
-            clearTimeout(this.updateTimeout);
-        }
-        
-        this.updateTimeout = setTimeout(() => {
-            this.processPendingUpdates();
-        }, this.UPDATE_DEBOUNCE_MS);
-    }
-    
-    private async processPendingUpdates(): Promise<void> {
-        if (!this.activeDocument || this.pendingUpdates.size === 0) {
-            return;
-        }
-        
-        const componentsToUpdate = Array.from(this.pendingUpdates.values());
-        this.pendingUpdates.clear();
-        
-        console.log(`Processing ${componentsToUpdate.length} pending component updates`);
-        
+    private async deleteComponent(document: vscode.TextDocument, component: VrmComponent): Promise<void> {
         try {
-            // Get current VRM content
-            let currentContent = this.activeDocument.getDocument().getText();
+            console.log('Deleting component:', component.n, 'from section:', component.section);
             
-            // Update each component in the XML sequentially
-            for (const updatedComponent of componentsToUpdate) {
-                console.log(`Updating component ${updatedComponent.n} to (${updatedComponent.x}, ${updatedComponent.y})`);
-                currentContent = this.updateComponentInXml(currentContent, updatedComponent);
+            const xmlGenerator = new ComponentXmlGenerator();
+            const updatedContent = xmlGenerator.deleteComponentFromXml(document.getText(), component);
+            
+            // Verify that we actually removed something
+            if (updatedContent === document.getText()) {
+                console.warn(`Component ${component.n} was not found in document for deletion`);
+                vscode.window.showWarningMessage(`Component ${component.n} was not found in the document`);
+                return;
             }
             
-            // Apply all changes in a single edit with retry logic
-            await this.applyEditWithRetry(currentContent);
+            const edit = new vscode.WorkspaceEdit();
+            edit.replace(
+                document.uri,
+                new vscode.Range(0, 0, document.lineCount, 0),
+                updatedContent
+            );
+            
+            const success = await vscode.workspace.applyEdit(edit);
+            if (success) {
+                console.log(`Component ${component.n} deleted successfully`);
+            } else {
+                throw new Error('Failed to apply workspace edit for deletion');
+            }
             
         } catch (error) {
-            console.error('Error in batch component update:', error);
-            vscode.window.showErrorMessage(`Failed to update components: ${error}`);
-        }
-    }
-    
-    private async applyEditWithRetry(newContent: string, maxRetries: number = 3): Promise<void> {
-        if (!this.activeDocument) {
-            throw new Error('No active document');
-        }
-        
-        for (let attempt = 1; attempt <= maxRetries; attempt++) {
-            try {
-                console.log(`Applying edit attempt ${attempt}/${maxRetries}`);
-                
-                // Create fresh document reference each time
-                const currentDocument = this.activeDocument.getDocument();
-                const edit = new vscode.WorkspaceEdit();
-                const fullRange = new vscode.Range(
-                    currentDocument.positionAt(0),
-                    currentDocument.positionAt(currentDocument.getText().length)
-                );
-                
-                edit.replace(currentDocument.uri, fullRange, newContent);
-                
-                const success = await vscode.workspace.applyEdit(edit);
-                
-                if (success) {
-                    console.log(`Successfully applied edit on attempt ${attempt}`);
-                    return;
-                } else {
-                    throw new Error('Workspace edit returned false');
-                }
-                
-            } catch (error) {
-                console.warn(`Edit attempt ${attempt} failed:`, error);
-                
-                if (attempt === maxRetries) {
-                    throw new Error(`Failed to apply edit after ${maxRetries} attempts: ${error}`);
-                }
-                
-                // Wait before retrying
-                await new Promise(resolve => setTimeout(resolve, 50 * attempt));
-                
-                // Refresh the document reference
-                this.activeDocument = new VrmDocument(this.activeDocument.getDocument());
-            }
+            console.error('Error deleting component:', error);
+            vscode.window.showErrorMessage(`Error deleting component: ${error}`);
         }
     }
 
-    private getTempDirectory(): string {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-            throw new Error('VRM Editor requires an open workspace folder');
+    private async createTempFile(document: vscode.TextDocument, type: 'html' | 'js', content: string): Promise<string> {
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+        if (!workspaceFolder) {
+            throw new Error('No workspace folder found. Please open a folder or workspace.');
         }
         
-        const tempDir = path.join(workspaceFolders[0].uri.fsPath, '.vscode', 'vrm-editor');
-        
-        // Create directory if it doesn't exist
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-            this.ensureGitIgnore(workspaceFolders[0].uri.fsPath);
-        }
-        
-        return tempDir;
-    }
-
-    private ensureGitIgnore(workspaceRoot: string): void {
-        const gitignorePath = path.join(workspaceRoot, '.gitignore');
-        const vrmIgnoreEntry = '.vscode/vrm-editor/';
+        // Create temp directory structure
+        const tempDir = path.join(workspaceFolder.uri.fsPath, '.vscode', 'vrm-editor');
         
         try {
-            let gitignoreContent = '';
-            if (fs.existsSync(gitignorePath)) {
-                gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+            await fs.promises.mkdir(tempDir, { recursive: true });
+        } catch (error) {
+            if ((error as any).code !== 'EEXIST') {
+                throw new Error(`Failed to create temp directory: ${error}`);
+            }
+        }
+        
+        // Create GitIgnore entry for temp directory
+        await this.ensureGitIgnoreEntry(workspaceFolder.uri.fsPath);
+        
+        // Generate temp file name
+        const baseName = path.basename(document.uri.fsPath, '.vrm');
+        const tempFileName = `${baseName}.vrm.${type}`;
+        const tempFilePath = path.join(tempDir, tempFileName);
+        
+        // Write content to temp file
+        await fs.promises.writeFile(tempFilePath, content, 'utf8');
+        
+        // Track temp file for cleanup
+        const documentPath = document.uri.fsPath;
+        if (!this.tempFiles.has(documentPath)) {
+            this.tempFiles.set(documentPath, []);
+        }
+        this.tempFiles.get(documentPath)!.push(tempFilePath);
+        
+        console.log('Created temp file:', tempFilePath);
+        return tempFilePath;
+    }
+
+    private async ensureGitIgnoreEntry(workspacePath: string): Promise<void> {
+        const gitIgnorePath = path.join(workspacePath, '.gitignore');
+        const ignoreEntry = '.vscode/vrm-editor/';
+        
+        try {
+            let gitIgnoreContent = '';
+            try {
+                gitIgnoreContent = await fs.promises.readFile(gitIgnorePath, 'utf8');
+            } catch (error) {
+                // File doesn't exist, will be created
+                console.log('Creating new .gitignore file');
             }
             
-            if (!gitignoreContent.includes(vrmIgnoreEntry)) {
-                const newContent = gitignoreContent + (gitignoreContent.endsWith('\n') ? '' : '\n') + vrmIgnoreEntry + '\n';
-                fs.writeFileSync(gitignorePath, newContent);
+            if (!gitIgnoreContent.includes(ignoreEntry)) {
+                const newContent = gitIgnoreContent + (gitIgnoreContent.endsWith('\n') ? '' : '\n') + ignoreEntry + '\n';
+                await fs.promises.writeFile(gitIgnorePath, newContent, 'utf8');
+                console.log('Added VRM temp directory to .gitignore');
             }
         } catch (error) {
             console.warn('Could not update .gitignore:', error);
         }
     }
 
-    private generateTempFileName(vrmPath: string, extension: string): string {
-        const vrmName = path.basename(vrmPath, '.vrm');
-        return `${vrmName}.vrm.${extension}`;
-    }
-
-    private cleanupTempFiles(vrmPath: string): void {
-        const tempInfo = this.tempFiles.get(vrmPath);
-        if (!tempInfo) {return;}
-
-        // Dispose watchers
-        tempInfo.watchers.forEach(watcher => watcher.dispose());
-
-        // Delete temp files
-        try {
-            if (tempInfo.htmlPath && fs.existsSync(tempInfo.htmlPath)) {
-                fs.unlinkSync(tempInfo.htmlPath);
-            }
-            if (tempInfo.jsPath && fs.existsSync(tempInfo.jsPath)) {
-                fs.unlinkSync(tempInfo.jsPath);
-            }
-        } catch (error) {
-            console.warn('Error cleaning up temp files:', error);
-        }
-
-        this.tempFiles.delete(vrmPath);
-    }
-
-    private async closeVrmEditorsAndCleanup(vrmPath: string): Promise<void> {
-        const tempInfo = this.tempFiles.get(vrmPath);
-        console.log("tab closed");
-        // Close any open HTML/JS editors for this VRM file
-        const editorsToClose: vscode.TextEditor[] = [];
-        
-        // Get the VRM filename without extension for pattern matching
-        const vrmFileName = path.basename(vrmPath, '.vrm');
-        const tempDir = this.getTempDirectory();
-        
-        // Find editors that match this VRM file's temp files
-        for (const editor of vscode.window.visibleTextEditors) {
-            const editorPath = editor.document.uri.fsPath;
-            const editorFileName = path.basename(editorPath);
-            console.log("editors filenames: ", editorFileName);
-            
-            // Check if this editor is editing a temp file for this VRM
-            if (editorFileName === `${vrmFileName}.vrm.html` || 
-                editorFileName === `${vrmFileName}.vrm.js`) {
-                editorsToClose.push(editor);
-            }
-        }
-
-        // Close the editors
-        for (const editor of editorsToClose) {
-            await vscode.window.showTextDocument(editor.document);
-            await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-        }
-
-        // Clean up temp files using both tracked info AND directory scan
-        await this.cleanupTempFilesForVrm(vrmPath, vrmFileName, tempDir);
-        
-        // Remove from tracking map
-        if (tempInfo) {
-            // Dispose watchers
-            tempInfo.watchers.forEach(watcher => watcher.dispose());
-            this.tempFiles.delete(vrmPath);
-        }
-    }
-
-    private async cleanupTempFilesForVrm(vrmPath: string, vrmFileName: string, tempDir: string): Promise<void> {
-        try {
-            // Method 1: Clean up tracked files
-            const tempInfo = this.tempFiles.get(vrmPath);
-            if (tempInfo) {
-                if (tempInfo.htmlPath && fs.existsSync(tempInfo.htmlPath)) {
-                    fs.unlinkSync(tempInfo.htmlPath);
-                    console.log(`Cleaned up tracked HTML file: ${tempInfo.htmlPath}`);
-                }
-                if (tempInfo.jsPath && fs.existsSync(tempInfo.jsPath)) {
-                    fs.unlinkSync(tempInfo.jsPath);
-                    console.log(`Cleaned up tracked JS file: ${tempInfo.jsPath}`);
-                }
-            }
-
-            // Method 2: Scan temp directory for any remaining files matching this VRM
-            if (fs.existsSync(tempDir)) {
-                const files = fs.readdirSync(tempDir);
-                
-                for (const file of files) {
-                    // Check if file matches pattern: filename.vrm.html or filename.vrm.js
-                    if (file === `${vrmFileName}.vrm.html` || file === `${vrmFileName}.vrm.js`) {
-                        const filePath = path.join(tempDir, file);
-                        try {
-                            fs.unlinkSync(filePath);
-                            console.log(`Cleaned up orphaned temp file: ${filePath}`);
-                        } catch (error) {
-                            console.warn(`Could not delete temp file ${filePath}:`, error);
-                        }
-                    }
-                }
-            }
-
-        } catch (error) {
-            console.warn('Error during temp file cleanup:', error);
-        }
-    }
-
-    // Also add a method to clean up ALL temp files when extension deactivates (optional)
-    private cleanupAllTempFiles(): void {
-        try {
-            // Clean up tracked files first
-            for (const vrmPath of this.tempFiles.keys()) {
-                const vrmFileName = path.basename(vrmPath, '.vrm');
-                const tempDir = this.getTempDirectory();
-                this.cleanupTempFilesForVrm(vrmPath, vrmFileName, tempDir);
-            }
-            
-            // Clear the tracking map
-            this.tempFiles.clear();
-            
-            // Optional: Remove entire temp directory if empty
-            const tempDir = this.getTempDirectory();
-            if (fs.existsSync(tempDir)) {
-                const files = fs.readdirSync(tempDir);
-                if (files.length === 0) {
-                    fs.rmdirSync(tempDir);
-                    console.log('Removed empty temp directory');
-                }
-            }
-            
-        } catch (error) {
-            console.warn('Error during full cleanup:', error);
-        }
-    }
-
-    // Add this method to VrmEditorProvider class for manual cleanup if needed
-    public async forceCleanupForVrm(vrmPath: string): Promise<void> {
-        const vrmFileName = path.basename(vrmPath, '.vrm');
-        const tempDir = this.getTempDirectory();
-        await this.cleanupTempFilesForVrm(vrmPath, vrmFileName, tempDir);
-    }
-
-    public async openHtmlEditor(): Promise<void> {
-        if (!this.activeDocument) {
-            vscode.window.showErrorMessage('No VRM document is currently active');
-            return;
-        }
-
-        try {
-            const vrmPath = this.activeDocument.uri.fsPath;
-            const tempDir = this.getTempDirectory();
-            const htmlFileName = this.generateTempFileName(vrmPath, 'html');
-            const htmlFilePath = path.join(tempDir, htmlFileName);
-
-            // Check if file already exists and is open in an editor
-            const existingEditor = vscode.window.visibleTextEditors.find(
-                editor => editor.document.uri.fsPath === htmlFilePath
-            );
-
-            if (existingEditor) {
-                // File is already open, just focus on it
-                await vscode.window.showTextDocument(existingEditor.document, { preview: false });
-                return;
-            }
-
-            // Get or create temp file info
-            let tempInfo = this.tempFiles.get(vrmPath);
-            if (!tempInfo) {
-                tempInfo = { watchers: [] };
-                this.tempFiles.set(vrmPath, tempInfo);
-            }
-
-            // Always replace temp file with current VRM content
-            let doc: vscode.TextDocument;
-            const htmlContent = this.activeDocument.getHtmlContent();
-            fs.writeFileSync(htmlFilePath, htmlContent, 'utf8');
-            doc = await vscode.workspace.openTextDocument(htmlFilePath);
-
-            tempInfo.htmlPath = htmlFilePath;
-            await vscode.window.showTextDocument(doc, { preview: false });
-
-            // Set up file watcher if not already watching
-            const existingWatcher = tempInfo.watchers.find(w => (w as any)._pattern === htmlFilePath);
-            if (!existingWatcher) {
-                const watcher = vscode.workspace.createFileSystemWatcher(htmlFilePath);
-                tempInfo.watchers.push(watcher);
-
-                // Auto-save functionality (if enabled)
-                const autoSaveEnabled = vscode.workspace.getConfiguration('vrmEditor').get<boolean>('autoSave', false);
-                const autoSaveDelay = vscode.workspace.getConfiguration('vrmEditor').get<number>('autoSaveDelay', 500);
-                let saveTimeout: NodeJS.Timeout | undefined;
-
-                // Track if we're currently saving to prevent reentrancy
-                let isSaving = false;
-
-                // Function to handle saving changes
-                const handleSave = async () => {
-                    if (isSaving) return;
-                    isSaving = true;
-                    try {
-                        const updatedContent = fs.readFileSync(htmlFilePath, 'utf8');
-                        this.activeDocument?.updateHtmlContent(updatedContent);
-                        await this.activeDocument?.getDocument().save();
-                    } catch (error) {
-                        console.error('Error saving HTML changes:', error);
-                    } finally {
-                        isSaving = false;
-                    }
-                };
-
-                // Update the file watcher to use the new save handler
-                watcher.onDidChange(async () => {
-                    try {
-                        if (autoSaveEnabled) {
-                            // Clear existing timeout
-                            if (saveTimeout) {
-                                clearTimeout(saveTimeout);
-                            }
-
-                            // Set new timeout
-                            saveTimeout = setTimeout(async () => {
-                                await handleSave();
-                            }, autoSaveDelay);
-                        }
-                    } catch (error) {
-                        console.error('Error syncing HTML changes:', error);
-                    }
-                });
-
-                // Update the save subscription to use the new save handler
-                const saveSubscription = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
-                    if (savedDoc.uri.fsPath === htmlFilePath) {
-                        await handleSave();
-                        vscode.window.showInformationMessage('HTML changes saved to VRM file');
-                    }
-                });
-
-                // Track if the editor is currently visible
-                let isEditorVisible = true;
-
-                // Handle tab visibility changes
-                const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
-                    const wasVisible = isEditorVisible;
-                    isEditorVisible = editors.some(e => e.document.uri.fsPath === htmlFilePath);
+    private setupTempFileWatcher(tempDoc: vscode.TextDocument, originalDoc: vscode.TextDocument, type: 'html' | 'js'): void {
+        const watcher = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+            if (savedDoc.uri.fsPath === tempDoc.uri.fsPath) {
+                try {
+                    console.log(`Syncing ${type.toUpperCase()} changes from temp file to VRM`);
                     
-                    // If the editor became visible again, ensure we're watching
-                    if (isEditorVisible && !wasVisible) {
-                        console.log('HTML editor became visible again');
-                    }
-                    // If the editor was closed, clean up
-                    else if (!isEditorVisible && wasVisible) {
-                        console.log('HTML editor is no longer visible');
-                    }
-                });
-
-                // Clean up when the editor is actually closed, not just when it's hidden
-                const closeSubscription = vscode.workspace.onDidCloseTextDocument(doc => {
-                    if (doc.uri.fsPath === htmlFilePath) {
-                        console.log('HTML editor was closed');
-                        if (saveTimeout) {
-                            clearTimeout(saveTimeout);
-                        }
-                        watcher.dispose();
-                        saveSubscription.dispose();
-                        visibleEditorsChange.dispose();
-                        closeSubscription.dispose();
-                        // Remove from watchers array
-                        const index = tempInfo!.watchers.indexOf(watcher);
-                        if (index > -1) {
-                            tempInfo!.watchers.splice(index, 1);
-                        }
-                    }
-                });
-
-                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange, closeSubscription);
-            }
-
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open HTML editor: ${error}`);
-        }
-    }
-
-    public async openJsEditor(): Promise<void> {
-        if (!this.activeDocument) {
-            vscode.window.showErrorMessage('No VRM document is currently active');
-            return;
-        }
-
-        try {
-            const vrmPath = this.activeDocument.uri.fsPath;
-            const tempDir = this.getTempDirectory();
-            const jsFileName = this.generateTempFileName(vrmPath, 'js');
-            const jsFilePath = path.join(tempDir, jsFileName);
-
-            // Check if file already exists and is open in an editor
-            const existingEditor = vscode.window.visibleTextEditors.find(
-                editor => editor.document.uri.fsPath === jsFilePath
-            );
-
-            if (existingEditor) {
-                // File is already open, just focus on it
-                await vscode.window.showTextDocument(existingEditor.document, { preview: false });
-                return;
-            }
-
-            // Get or create temp file info
-            let tempInfo = this.tempFiles.get(vrmPath);
-            if (!tempInfo) {
-                tempInfo = { watchers: [] };
-                this.tempFiles.set(vrmPath, tempInfo);
-            }
-
-            // Always replace temp file with current VRM content
-            let doc: vscode.TextDocument;
-            const jsContent = this.activeDocument.getJsContent();
-            fs.writeFileSync(jsFilePath, jsContent, 'utf8');
-            doc = await vscode.workspace.openTextDocument(jsFilePath);
-
-            tempInfo.jsPath = jsFilePath;
-            await vscode.window.showTextDocument(doc, { preview: false });
-
-            // Set up file watcher if not already watching
-            const existingWatcher = tempInfo.watchers.find(w => (w as any)._pattern === jsFilePath);
-            if (!existingWatcher) {
-                const watcher = vscode.workspace.createFileSystemWatcher(jsFilePath);
-                tempInfo.watchers.push(watcher);
-
-                // Auto-save functionality (if enabled)
-                const autoSaveEnabled = vscode.workspace.getConfiguration('vrmEditor').get<boolean>('autoSave', false);
-                const autoSaveDelay = vscode.workspace.getConfiguration('vrmEditor').get<number>('autoSaveDelay', 500);
-                let saveTimeout: NodeJS.Timeout | undefined;
-
-                // Track if we're currently saving to prevent reentrancy
-                let isSaving = false;
-
-                // Function to handle saving changes
-                const handleSave = async () => {
-                    if (isSaving) return;
-                    isSaving = true;
-                    try {
-                        const updatedContent = fs.readFileSync(jsFilePath, 'utf8');
-                        this.activeDocument?.updateJsContent(updatedContent);
-                        await this.activeDocument?.getDocument().save();
-                    } catch (error) {
-                        console.error('Error saving JavaScript changes:', error);
-                    } finally {
-                        isSaving = false;
-                    }
-                };
-
-                // Update the file watcher to use the new save handler
-                watcher.onDidChange(async () => {
-                    try {
-                        if (autoSaveEnabled) {
-                            // Clear existing timeout
-                            if (saveTimeout) {
-                                clearTimeout(saveTimeout);
-                            }
-
-                            // Set new timeout
-                            saveTimeout = setTimeout(async () => {
-                                await handleSave();
-                            }, autoSaveDelay);
-                        }
-                    } catch (error) {
-                        console.error('Error syncing JavaScript changes:', error);
-                    }
-                });
-
-                // Update the save subscription to use the new save handler
-                const saveSubscription = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
-                    if (savedDoc.uri.fsPath === jsFilePath) {
-                        await handleSave();
-                        vscode.window.showInformationMessage('JavaScript changes saved to VRM file');
-                    }
-                });
-
-                // Track if the editor is currently visible
-                let isEditorVisible = true;
-
-                // Handle tab visibility changes
-                const visibleEditorsChange = vscode.window.onDidChangeVisibleTextEditors(editors => {
-                    const wasVisible = isEditorVisible;
-                    isEditorVisible = editors.some(e => e.document.uri.fsPath === jsFilePath);
+                    const vrmDocument = new VrmDocument(originalDoc);
+                    let updatedContent: string;
                     
-                    // If the editor became visible again, ensure we're watching
-                    if (isEditorVisible && !wasVisible) {
-                        console.log('JavaScript editor became visible again');
+                    if (type === 'html') {
+                        updatedContent = vrmDocument.updateHtmlContent(savedDoc.getText());
+                    } else {
+                        updatedContent = vrmDocument.updateJsContent(savedDoc.getText());
                     }
-                    // If the editor was closed, clean up
-                    else if (!isEditorVisible && wasVisible) {
-                        console.log('JavaScript editor is no longer visible');
+                    
+                    const edit = new vscode.WorkspaceEdit();
+                    edit.replace(
+                        originalDoc.uri,
+                        new vscode.Range(0, 0, originalDoc.lineCount, 0),
+                        updatedContent
+                    );
+                    
+                    const success = await vscode.workspace.applyEdit(edit);
+                    if (success) {
+                        console.log(`${type.toUpperCase()} changes synced successfully`);
+                    } else {
+                        throw new Error('Failed to apply edit');
                     }
-                });
-
-                // Clean up when the editor is actually closed, not just when it's hidden
-                const closeSubscription = vscode.workspace.onDidCloseTextDocument(doc => {
-                    if (doc.uri.fsPath === jsFilePath) {
-                        console.log('JavaScript editor was closed');
-                        if (saveTimeout) {
-                            clearTimeout(saveTimeout);
-                        }
-                        watcher.dispose();
-                        saveSubscription.dispose();
-                        visibleEditorsChange.dispose();
-                        closeSubscription.dispose();
-                        // Remove from watchers array
-                        const index = tempInfo!.watchers.indexOf(watcher);
-                        if (index > -1) {
-                            tempInfo!.watchers.splice(index, 1);
-                        }
-                    }
-                });
-
-                this.context.subscriptions.push(watcher, saveSubscription, visibleEditorsChange, closeSubscription);
+                    
+                } catch (error) {
+                    console.error(`Error syncing ${type.toUpperCase()} changes:`, error);
+                    vscode.window.showErrorMessage(`Error syncing ${type.toUpperCase()} changes: ${error}`);
+                }
             }
-
-        } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open JavaScript editor: ${error}`);
-        }
-    }
-
-    private getHtmlForWebview(webview: vscode.Webview): string {
-        // Parse components from VRM file with section information
-        const vrmContent = this.activeDocument?.getDocument().getText() || '';
-        
-        // Parse both sections separately to maintain section identity
-        const preprocMatch = vrmContent.match(/<preproc>([\s\S]*?)<\/preproc>/);
-        const postprocMatch = vrmContent.match(/<postproc>([\s\S]*?)<\/postproc>/);
-        
-        let allComponents: any[] = [];
-        
-        if (this.visualEditor) {
-            if (preprocMatch) {
-                const preprocComponents = this.visualEditor.parseComponentSection(preprocMatch[1], 'preproc');
-                allComponents = allComponents.concat(preprocComponents);
-            }
-            
-            if (postprocMatch) {
-                const postprocComponents = this.visualEditor.parseComponentSection(postprocMatch[1], 'postproc');
-                allComponents = allComponents.concat(postprocComponents);
-            }
-        }
-        
-        return /* html*/`<!DOCTYPE html>
-        <html lang="en">
-        <head>
-            <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>VRM Editor</title>
-            <style>
-                body {
-                    font-family: var(--vscode-font-family);
-                    font-size: var(--vscode-font-size);
-                    color: var(--vscode-foreground);
-                    background-color: var(--vscode-editor-background);
-                    padding: 20px;
-                    margin: 0;
-                }
-                .header {
-                    display: flex;
-                    gap: 10px;
-                    margin-bottom: 30px;
-                    padding-bottom: 15px;
-                    border-bottom: 1px solid var(--vscode-panel-border);
-                }
-                .button {
-                    background-color: var(--vscode-button-background);
-                    color: var(--vscode-button-foreground);
-                    border: none;
-                    padding: 10px 20px;
-                    border-radius: 4px;
-                    cursor: pointer;
-                    font-size: 14px;
-                    font-weight: 500;
-                }
-                .button:hover {
-                    background-color: var(--vscode-button-hoverBackground);
-                }
-                .content {
-                    max-width: 1200px;
-                }
-                h1 {
-                    margin: 0 0 20px 0;
-                    font-size: 24px;
-                    font-weight: 600;
-                }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <button class="button" onclick="openHtml()">Open HTML Editor</button>
-                <button class="button" onclick="openJs()">Open JavaScript Editor</button>
-            </div>
-            
-            <div class="content">
-                ${this.visualEditor?.generateVisualEditorHtml() || ''}
-            </div>
-            
-            <script>
-                const vscode = acquireVsCodeApi();
-                
-                function openHtml() {
-                    vscode.postMessage({ command: 'openHtml' });
-                }
-                
-                function openJs() {
-                    vscode.postMessage({ command: 'openJs' });
-                }
-                
-                // Initialize the visual editor with components (including section info)
-                window.addEventListener('DOMContentLoaded', function() {
-                    const components = ${JSON.stringify(allComponents)};
-                    if (typeof renderComponents === 'function') {
-                        renderComponents(components);
-                    }
-                });
-                
-                // Handle messages from extension
-                window.addEventListener('message', event => {
-                    const message = event.data;
-                    switch (message.type) {
-                        case 'updateComponents':
-                            if (typeof renderComponents === 'function') {
-                                renderComponents(message.components);
-                            }
-                            break;
-                    }
-                });
-            </script>
-        </body>
-        </html>`;
-    }
-    
-    private updateComponent(updatedComponent: any): void {
-        if (!this.activeDocument) {
-            console.error('No active document for component update');
-            return;
-        }
-        
-        console.log(`Received single update for component ${updatedComponent.n}`);
-        
-        // Add to pending updates
-        this.pendingUpdates.set(updatedComponent.n, updatedComponent);
-        
-        // Clear existing timeout and set a new one
-        if (this.updateTimeout) {
-            clearTimeout(this.updateTimeout);
-        }
-        
-        this.updateTimeout = setTimeout(() => {
-            this.processPendingUpdates();
-        }, this.UPDATE_DEBOUNCE_MS);
-    }
-    
-    private updateComponentInXml(xmlContent: string, updatedComponent: any): string {
-        // Find the component in both preproc and postproc sections
-        const preprocMatch = xmlContent.match(/<preproc>([\s\S]*?)<\/preproc>/);
-        const postprocMatch = xmlContent.match(/<postproc>([\s\S]*?)<\/postproc>/);
-        
-        let updatedXml = xmlContent;
-        
-        if (preprocMatch && updatedComponent.section === 'preproc') {
-            const updatedPreproc = this.updateComponentInSection(preprocMatch[1], updatedComponent);
-            updatedXml = updatedXml.replace(preprocMatch[1], updatedPreproc);
-        }
-        
-        if (postprocMatch && updatedComponent.section === 'postproc') {
-            const updatedPostproc = this.updateComponentInSection(postprocMatch[1], updatedComponent);
-            updatedXml = updatedXml.replace(postprocMatch[1], updatedPostproc);
-        }
-        
-        return updatedXml;
-    }
-    
-    private updateComponentInSection(sectionContent: string, updatedComponent: any): string {
-        // Find the specific component by ID
-        const componentRegex = new RegExp(`<c>\\s*<n>${updatedComponent.n}</n>[\\s\\S]*?</c>`, 'g');
-        
-        return sectionContent.replace(componentRegex, (match) => {
-            // Generate updated component XML
-            return this.generateComponentXml(updatedComponent);
         });
-    }
-    
-    private generateComponentXml(component: any): string {
-        let xml = `<c>
-            <n>${component.n}</n>
-            <t>${component.t}</t>`;
         
-        // Add values section if it exists
-        if (component.values) {
-            xml += '\n        <values>';
-            
-            // Handle different component types with enhanced XML generation
-            xml += this.generateValuesXmlByType(component);
-            
-            xml += '\n        </values>';
+        // Track watchers for cleanup
+        const documentPath = originalDoc.uri.fsPath;
+        if (!this.tempFileWatchers.has(documentPath)) {
+            this.tempFileWatchers.set(documentPath, []);
         }
+        this.tempFileWatchers.get(documentPath)!.push(watcher);
         
-        // Add connections
-        if (component.j && component.j.length > 0) {
-            component.j.forEach((jump: number) => {
-                if (jump > 0) {
-                    xml += `\n        <j>${jump}</j>`;
-                } else {
-                    xml += '\n        <j />';
+        this.context.subscriptions.push(watcher);
+    }
+
+    private async cleanupTempFiles(documentPath: string): Promise<void> {
+        console.log('Cleaning up temp files for:', documentPath);
+        
+        const tempFilePaths = this.tempFiles.get(documentPath);
+        if (tempFilePaths) {
+            for (const filePath of tempFilePaths) {
+                try {
+                    // Close any open editors for this temp file
+                    await this.closeTempFileEditors(filePath);
+                    
+                    // Delete the temp file
+                    await fs.promises.unlink(filePath);
+                    console.log('Cleaned up temp file:', filePath);
+                    
+                } catch (error) {
+                    console.warn('Error cleaning up temp file:', filePath, error);
                 }
-            });
-        } else {
-            // Default empty connections
-            xml += '\n        <j />';
-            xml += '\n        <j />';
-        }
-        
-        // Add position and metadata
-        xml += `\n        <x>${component.x}</x>`;
-        xml += `\n        <y>${component.y}</y>`;
-        
-        // Comment
-        if (component.c) {
-            xml += `\n        <c>${component.c}</c>`;
-        } else {
-            xml += '\n        <c />';
-        }
-        
-        // Watchpoint
-        if (component.wp === null) {
-            xml += '\n        <wp />';
-        } else {
-            xml += `\n        <wp>${component.wp ? '1' : '0'}</wp>`;
-        }
-        
-        xml += '\n    </c>';
-        
-        return xml;
-    }
-    
-    private generateValuesXmlByType(component: any): string {
-        if (!component.values) return '';
-        
-        switch (component.t) {
-            case 'CSF':
-                return this.generateCsfValuesXml(component.values);
-            case 'SQLTRN':
-                return this.generateSqlTrnValuesXml(component.values);
-            case 'MATH':
-                return this.generateMathValuesXml(component.values);
-            case 'TEMPLATE':
-                return this.generateTemplateValuesXml(component.values);
-            case 'INSERTUPDATEQUERY':
-            case 'SELECTQUERY':
-                return this.generateQueryValuesXml(component.values);
-            case 'SCRIPT':
-                return this.generateScriptValuesXml(component.values);
-            case 'ERROR':
-                return this.generateErrorValuesXml(component.values);
-            case 'IF':
-                return this.generateIfValuesXml(component.values);
-            case 'SET':
-                return this.generateSetValuesXml(component.values);
-            case 'EXTERNAL':
-                return this.generateExternalValuesXml(component.values);
-            default:
-                return this.generateLegacyValuesXml(component.values);
-        }
-    }
-    
-    private generateCsfValuesXml(values: any): string {
-        let xml = '';
-        xml += `\n            <n>${values.functionName || ''}</n>`;
-        if (values.returnValue) {
-            xml += `\n            <v><![CDATA[${values.returnValue}]]></v>`;
-        } else {
-            xml += '\n            <v />';
-        }
-        
-        if (values.functionParams) {
-            values.functionParams.forEach((param: any) => {
-                xml += `\n            <n>${param.label || ''}</n>`;
-                if (param.value) {
-                    xml += `\n            <v><![CDATA[${param.value}]]></v>`;
-                } else {
-                    xml += '\n            <v />';
-                }
-            });
-        }
-        return xml;
-    }
-    
-    private generateSqlTrnValuesXml(values: any): string {
-        let xml = '';
-        if (values.transactionName) {
-            xml += `\n            <n>${values.transactionName}</n>`;
-        } else {
-            xml += '\n            <n />';
-        }
-        if (values.transactionType) {
-            xml += `\n            <t>${values.transactionType}</t>`;
-        } else {
-            xml += '\n            <t />';
-        }
-        return xml;
-    }
-    
-    private generateMathValuesXml(values: any): string {
-        let xml = '';
-        xml += `\n            <n>${values.mathName || ''}</n>`;
-        xml += `\n            <f>${values.mathFormat || ''}</f>`;
-        xml += `\n            <v>${values.mathParam || ''}</v>`;
-        return xml;
-    }
-    
-    private generateTemplateValuesXml(values: any): string {
-        let xml = '';
-        xml += `\n            <n>${values.templateName || ''}</n>`;
-        xml += `\n            <t>${values.templateTarget || ''}</t>`;
-        return xml;
-    }
-    
-    private generateQueryValuesXml(values: any): string {
-        let xml = '';
-        if (values.query) {
-            xml += `\n            <query><![CDATA[${values.query}]]></query>`;
-        } else {
-            xml += '\n            <query />';
-        }
-        
-        if (values.params) {
-            values.params.forEach((param: any) => {
-                xml += '\n            <param>';
-                xml += `\n                <n>${param.name}</n>`;
-                xml += `\n                <t>${param.type}</t>`;
-                xml += `\n                <v><![CDATA[${param.value}]]></v>`;
-                xml += '\n            </param>';
-            });
-        }
-        return xml;
-    }
-    
-    private generateScriptValuesXml(values: any): string {
-        let xml = '';
-        if (values.script) {
-            xml += `\n            <v><![CDATA[${values.script}]]></v>`;
-        } else {
-            xml += '\n            <v />';
-        }
-        xml += `\n            <lng>${values.language || ''}</lng>`;
-        return xml;
-    }
-    
-    private generateErrorValuesXml(values: any): string {
-        if (values.errorMessage) {
-            return `\n            <v><![CDATA[${values.errorMessage}]]></v>`;
-        } else {
-            return '\n            <v />';
-        }
-    }
-    
-    private generateIfValuesXml(values: any): string {
-        if (values.condition) {
-            return `\n            <v><![CDATA[${values.condition}]]></v>`;
-        } else {
-            return '\n            <v><![CDATA[]]></v>';
-        }
-    }
-    
-    private generateSetValuesXml(values: any): string {
-        let xml = '';
-        if (values.variables) {
-            values.variables.forEach((variable: any) => {
-                if (variable.name) {
-                    xml += `\n            <n><![CDATA[${variable.name}]]></n>`;
-                } else {
-                    xml += '\n            <n />';
-                }
-                if (variable.value) {
-                    xml += `\n            <v><![CDATA[${variable.value}]]></v>`;
-                } else {
-                    xml += '\n            <v />';
-                }
-            });
-        }
-        return xml;
-    }
-    
-    private generateExternalValuesXml(values: any): string {
-        if (values.externalValue) {
-            return `\n            <v>${values.externalValue}</v>`;
-        } else {
-            return '\n            <v />';
-        }
-    }
-    
-    private generateLegacyValuesXml(values: any): string {
-        let xml = '';
-        
-        // Legacy conditions
-        if (values.conditions) {
-            values.conditions.forEach((condition: string) => {
-                xml += `\n            <v><![CDATA[${condition}]]></v>`;
-            });
-        }
-        
-        // Legacy query
-        if (values.query) {
-            xml += `\n            <query><![CDATA[${values.query}]]></query>`;
-        }
-        
-        // Legacy parameters
-        if (values.params) {
-            values.params.forEach((param: any) => {
-                xml += '\n            <param>';
-                xml += `\n                <n>${param.name}</n>`;
-                xml += `\n                <t>${param.type}</t>`;
-                xml += `\n                <v><![CDATA[${param.value}]]></v>`;
-                xml += '\n            </param>';
-            });
-        }
-        
-        return xml;
-    }
-    
-    private updateWebview(webview: vscode.Webview): void {
-        // Parse components and update visual editor
-        if (this.activeDocument && this.visualEditor) {
-            const vrmContent = this.activeDocument.getDocument().getText();
-            const components = this.visualEditor.parseComponents(vrmContent);
+            }
             
-            // Send update message to the webview
-            webview.postMessage({
-                type: 'updateComponents',
-                components: components
-            });
+            this.tempFiles.delete(documentPath);
+        }
+        
+        // Also scan for orphaned temp files
+        await this.scanAndCleanupOrphanedTempFiles(documentPath);
+    }
+
+    private async closeTempFileEditors(filePath: string): Promise<void> {
+        try {
+            const tempUri = vscode.Uri.file(filePath);
             
-            // Also update the visual editor's internal state
-            this.visualEditor.updateWebview(components);
+            // Find and close all tabs with this temp file
+            for (const tabGroup of vscode.window.tabGroups.all) {
+                for (const tab of tabGroup.tabs) {
+                    if (tab.input instanceof vscode.TabInputText && 
+                        tab.input.uri.fsPath === filePath) {
+                        await vscode.window.tabGroups.close(tab);
+                        console.log('Closed temp file editor:', filePath);
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('Error closing temp file editors:', error);
+        }
+    }
+
+    private async scanAndCleanupOrphanedTempFiles(documentPath: string): Promise<void> {
+        try {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(documentPath));
+            if (!workspaceFolder) return;
+            
+            const tempDir = path.join(workspaceFolder.uri.fsPath, '.vscode', 'vrm-editor');
+            const baseName = path.basename(documentPath, '.vrm');
+            
+            try {
+                const files = await fs.promises.readdir(tempDir);
+                const relatedFiles = files.filter(file => file.startsWith(`${baseName}.vrm.`));
+                
+                for (const file of relatedFiles) {
+                    const filePath = path.join(tempDir, file);
+                    try {
+                        await this.closeTempFileEditors(filePath);
+                        await fs.promises.unlink(filePath);
+                        console.log('Cleaned up orphaned temp file:', filePath);
+                    } catch (unlinkError) {
+                        console.warn('Could not delete orphaned temp file:', filePath, unlinkError);
+                    }
+                }
+                
+                // Try to remove temp directory if empty
+                try {
+                    await fs.promises.rmdir(tempDir);
+                    console.log('Removed empty temp directory');
+                } catch (rmdirError) {
+                    // Directory not empty, which is fine
+                }
+                
+            } catch (readdirError) {
+                // Temp directory doesn't exist, which is fine
+            }
+            
+        } catch (error) {
+            console.warn('Error during orphaned temp file cleanup:', error);
+        }
+    }
+
+    private cleanupWatchers(documentPath: string): void {
+        const watchers = this.tempFileWatchers.get(documentPath);
+        if (watchers) {
+            watchers.forEach(watcher => {
+                watcher.dispose();
+            });
+            this.tempFileWatchers.delete(documentPath);
+            console.log('Cleaned up watchers for:', documentPath);
         }
     }
 }

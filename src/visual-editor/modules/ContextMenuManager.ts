@@ -5,6 +5,7 @@ import {
     ISelectionManager,
     IRenderingManager,
     VrmComponent,
+    IKeyboardManager,
     CustomWindow 
 } from '../../types';
 
@@ -145,15 +146,14 @@ export class ContextMenuManager implements IContextMenuManager {
                     },
                     { separator: true },
                     {
-                        text: 'Delete',
+                        text: 'Delete Selected',
                         icon: '🗑️',
                         shortcut: 'Del',
                         action: () => {
-                            // TODO: Implement delete functionality
-                            console.log('Delete selected components');
-                            this.showTemporaryMessage('Delete functionality coming soon');
+                            this.deleteSelectedComponents();
                             this.closeContextMenu();
-                        }
+                        },
+                        enabled: stateManager.getSelectedComponents().size > 0
                     }
                 ]
             },
@@ -300,6 +300,28 @@ export class ContextMenuManager implements IContextMenuManager {
         }, 100);
     }
 
+    private deleteSelectedComponents(): void {
+        const stateManager: IStateManager = window.stateManager;
+        const selectedComponents = stateManager.getSelectedComponents();
+        
+        if (selectedComponents.size === 0) {
+            this.showTemporaryMessage('No components selected to delete');
+            return;
+        }
+        
+        console.log('Context menu delete triggered with', selectedComponents.size, 'components');
+        
+        // Simple approach: directly trigger delete key event
+        const deleteEvent = new KeyboardEvent('keydown', {
+            key: 'Delete',
+            bubbles: true,
+            cancelable: true
+        });
+        
+        // Dispatch to document to ensure it gets picked up
+        document.dispatchEvent(deleteEvent);
+    }
+
     private buildMenuItem(parentElement: HTMLElement, menuItems: any[], level: number = 0): void {
         menuItems.forEach((item, index) => {
             if (item.separator) {
@@ -321,6 +343,14 @@ export class ContextMenuManager implements IContextMenuManager {
             menuItem.style.color = 'var(--vscode-menu-foreground)';
             menuItem.style.transition = 'background-color 0.2s';
             menuItem.style.position = 'relative';
+            
+            // Check if item is disabled
+            const isDisabled = item.enabled === false;
+            if (isDisabled) {
+                menuItem.style.opacity = '0.5';
+                menuItem.style.cursor = 'default';
+                menuItem.style.color = 'var(--vscode-descriptionForeground)';
+            }
             
             // Left side content (icon + text)
             const leftContent = document.createElement('div');
@@ -371,72 +401,76 @@ export class ContextMenuManager implements IContextMenuManager {
             
             menuItem.appendChild(rightContent);
             
-            // Hover effects
-            menuItem.onmouseover = () => {
-                // Remove hover from siblings
-                Array.from(parentElement.children).forEach(child => {
-                    if (child !== menuItem && child.classList.contains('menu-item')) {
-                        (child as HTMLElement).style.backgroundColor = 'transparent';
-                        (child as HTMLElement).style.color = 'var(--vscode-menu-foreground)';
-                    }
-                });
-                
-                menuItem.style.backgroundColor = 'var(--vscode-menu-selectionBackground)';
-                menuItem.style.color = 'var(--vscode-menu-selectionForeground)';
-            };
-            
-            menuItem.onmouseout = () => {
-                menuItem.style.backgroundColor = 'transparent';
-                menuItem.style.color = 'var(--vscode-menu-foreground)';
-            };
-            
-            // Click handler
-            if (item.hasSubmenu && level === 0) {
-                // Main menu items with submenus - show submenu on click
-                menuItem.onclick = (e) => {
-                    e.stopPropagation();
-                    
-                    // Hide any existing submenus from siblings
-                    Array.from(parentElement.children).forEach(child => {
-                        if (child !== menuItem && child.classList.contains('menu-item')) {
-                            this.hideSubmenus(child as HTMLElement);
-                        }
-                    });
-                    
-                    // Toggle submenu for this item
-                    const existingSubmenu = menuItem.querySelector('.submenu');
-                    if (existingSubmenu) {
-                        this.hideSubmenus(menuItem);
-                    } else {
-                        this.showSubmenu(menuItem, item.submenuItems, level);
-                    }
-                };
-            } else if (item.hasSubmenu) {
-                // Nested submenu items - show on hover
+            // Hover effects (only if not disabled)
+            if (!isDisabled) {
                 menuItem.onmouseover = () => {
-                    // Hide submenus from siblings
+                    // Remove hover from siblings
                     Array.from(parentElement.children).forEach(child => {
                         if (child !== menuItem && child.classList.contains('menu-item')) {
-                            this.hideSubmenus(child as HTMLElement);
+                            (child as HTMLElement).style.backgroundColor = 'transparent';
+                            (child as HTMLElement).style.color = 'var(--vscode-menu-foreground)';
                         }
                     });
                     
-                    // Show submenu for this item
-                    const existingSubmenu = menuItem.querySelector('.submenu');
-                    if (!existingSubmenu) {
-                        this.showSubmenu(menuItem, item.submenuItems, level);
-                    }
-                    
-                    // Apply hover style
                     menuItem.style.backgroundColor = 'var(--vscode-menu-selectionBackground)';
                     menuItem.style.color = 'var(--vscode-menu-selectionForeground)';
                 };
-            } else if (item.action) {
-                // Items with actions - execute action on click
-                menuItem.onclick = (e) => {
-                    e.stopPropagation();
-                    item.action();
+                
+                menuItem.onmouseout = () => {
+                    menuItem.style.backgroundColor = 'transparent';
+                    menuItem.style.color = 'var(--vscode-menu-foreground)';
                 };
+            }
+            
+            // Click handler (only if not disabled)
+            if (!isDisabled) {
+                if (item.hasSubmenu && level === 0) {
+                    // Main menu items with submenus - show submenu on click
+                    menuItem.onclick = (e) => {
+                        e.stopPropagation();
+                        
+                        // Hide any existing submenus from siblings
+                        Array.from(parentElement.children).forEach(child => {
+                            if (child !== menuItem && child.classList.contains('menu-item')) {
+                                this.hideSubmenus(child as HTMLElement);
+                            }
+                        });
+                        
+                        // Toggle submenu for this item
+                        const existingSubmenu = menuItem.querySelector('.submenu');
+                        if (existingSubmenu) {
+                            this.hideSubmenus(menuItem);
+                        } else {
+                            this.showSubmenu(menuItem, item.submenuItems, level);
+                        }
+                    };
+                } else if (item.hasSubmenu) {
+                    // Nested submenu items - show on hover
+                    menuItem.onmouseover = () => {
+                        // Hide submenus from siblings
+                        Array.from(parentElement.children).forEach(child => {
+                            if (child !== menuItem && child.classList.contains('menu-item')) {
+                                this.hideSubmenus(child as HTMLElement);
+                            }
+                        });
+                        
+                        // Show submenu for this item
+                        const existingSubmenu = menuItem.querySelector('.submenu');
+                        if (!existingSubmenu) {
+                            this.showSubmenu(menuItem, item.submenuItems, level);
+                        }
+                        
+                        // Apply hover style
+                        menuItem.style.backgroundColor = 'var(--vscode-menu-selectionBackground)';
+                        menuItem.style.color = 'var(--vscode-menu-selectionForeground)';
+                    };
+                } else if (item.action) {
+                    // Items with actions - execute action on click
+                    menuItem.onclick = (e) => {
+                        e.stopPropagation();
+                        item.action();
+                    };
+                }
             }
             
             parentElement.appendChild(menuItem);

@@ -43,6 +43,56 @@ export class ComponentXmlGenerator {
         return updatedXml;
     }
 
+    public deleteComponentFromXml(xmlContent: string, componentToDelete: VrmComponent): string {
+        try {
+            console.log(`Attempting to delete component ${componentToDelete.n} from ${componentToDelete.section} section`);
+            
+            // Extract the appropriate section
+            const sectionPattern = componentToDelete.section === 'preproc' ? 
+                /<preproc>([\s\S]*?)<\/preproc>/ : 
+                /<postproc>([\s\S]*?)<\/postproc>/;
+            
+            const sectionMatch = xmlContent.match(sectionPattern);
+            if (!sectionMatch) {
+                console.warn(`Could not find ${componentToDelete.section} section in XML`);
+                return xmlContent;
+            }
+            
+            const sectionContent = sectionMatch[1];
+            const updatedSectionContent = this.deleteComponentFromSection(sectionContent, componentToDelete.n);
+            
+            // Replace the section content in the full XML
+            const updatedXml = xmlContent.replace(sectionContent, updatedSectionContent);
+            
+            console.log(`Component ${componentToDelete.n} successfully removed from XML`);
+            return updatedXml;
+            
+        } catch (error) {
+            console.error('Error deleting component from XML:', error);
+            return xmlContent; // Return original content if deletion fails
+        }
+    }
+
+    private deleteComponentFromSection(sectionContent: string, componentId: number): string {
+        // More robust component deletion pattern
+        // This pattern captures the entire component block including surrounding whitespace
+        const componentPattern = new RegExp(
+            `\\s*<c>\\s*<n>${componentId}</n>[\\s\\S]*?</c>(?:\\s*\\n)?`, 
+            'g'
+        );
+        
+        const updatedContent = sectionContent.replace(componentPattern, '');
+        
+        // Log for debugging
+        if (updatedContent === sectionContent) {
+            console.warn(`Component ${componentId} was not found in section content`);
+        } else {
+            console.log(`Component ${componentId} successfully removed from section`);
+        }
+        
+        return updatedContent;
+    }
+
     private generateValuesSection(component: VrmComponent): string {
         if (!component.values) return '';
         
