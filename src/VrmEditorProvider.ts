@@ -13,6 +13,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private static readonly viewType = 'vrmEditor.vrmEditor';
     private tempFiles: Map<string, string[]> = new Map();
     private tempFileWatchers: Map<string, vscode.Disposable[]> = new Map();
+    private codeEditorWatchers: Map<string, vscode.Disposable> = new Map(); // Track code editor watchers
 
     constructor(private context: vscode.ExtensionContext) {}
 
@@ -70,6 +71,18 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                         await this.deleteComponent(document, message.component);
                         break;
                     
+                    case 'openCodeEditor':
+                        await this.openCodeEditor(
+                            message.content, 
+                            message.language, 
+                            message.filename, 
+                            message.componentId, 
+                            message.componentType,
+                            document,
+                            webviewPanel
+                        );
+                        break;
+                    
                     default:
                         console.warn('Unknown command:', message.command);
                 }
@@ -92,7 +105,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel.onDidDispose(
             () => {
                 this.cleanupTempFiles(document.uri.fsPath);
-                this.cleanupWatchers(document.uri.fsPath);
+                this.cleanupTempFileWatchers(document.uri.fsPath);
+                this.cleanupCodeEditorWatchers(document.uri.fsPath);
                 changeDocumentSubscription.dispose();
             },
             null,
@@ -177,6 +191,283 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             </body>
             </html>
         `;
+    }
+
+    // Enhanced openCodeEditor method with better sync support
+    private async openCodeEditor(
+        content: string, 
+        language: string, 
+        filename: string, 
+        componentId?: number, 
+        componentType?: string,
+        originalDocument?: vscode.TextDocument,
+        webviewPanel?: vscode.WebviewPanel
+    ): Promise<void> {
+        try {
+            console.log(`Opening enhanced code editor for component ${componentId} (${componentType})`);
+            
+            // Get workspace folder
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) {
+                throw new Error('No workspace folder found. Please open a folder or workspace.');
+            }
+            
+            // Create temp directory for code files
+            const tempDir = path.join(workspaceFolders[0].uri.fsPath, '.vscode', 'vrm-editor', 'code');
+            
+            try {
+                await fs.promises.mkdir(tempDir, { recursive: true });
+            } catch (error) {
+                if ((error as any).code !== 'EEXIST') {
+                    throw new Error(`Failed to create temp directory: ${error}`);
+                }
+            }
+            
+            // Determine file extension and language mode
+            const getFileInfo = (lang: string): { extension: string; mode: string } => {
+                switch (lang.toLowerCase()) {
+                    case 'sql': 
+                        return { extension: 'sql', mode: 'sql' };
+                    case 'pascal': 
+                        return { extension: 'pas', mode: 'pascal' };
+                    case 'javascript': 
+                        return { extension: 'js', mode: 'javascript' };
+                    case 'typescript': 
+                        return { extension: 'ts', mode: 'typescript' };
+                    case 'python': 
+                        return { extension: 'py', mode: 'python' };
+                    case 'csharp': 
+                        return { extension: 'cs', mode: 'csharp' };
+                    default: 
+                        return { extension: 'txt', mode: 'plaintext' };
+                }
+            };
+            
+            const fileInfo = getFileInfo(language);
+            const tempFileName = `${filename}.${fileInfo.extension}`;
+            const tempFilePath = path.join(tempDir, tempFileName);
+            
+            // Write enhanced content with metadata header
+            const enhancedContent = this.generateCodeFileHeader(componentId, componentType, language) + content;
+            await fs.promises.writeFile(tempFilePath, enhancedContent, 'utf8');
+            
+            // Open the file in VS Code
+            const tempDocument = await vscode.workspace.openTextDocument(tempFilePath);
+            const editor = await vscode.window.showTextDocument(tempDocument, { 
+                viewColumn: vscode.ViewColumn.Beside,
+                preview: false 
+            });
+            
+            // Set language mode
+            await vscode.languages.setTextDocumentLanguage(tempDocument, fileInfo.mode);
+            
+            // Enhanced notification with instructions
+            const action = await vscode.window.showInformationMessage(
+                `📝 ${componentType} ${language.toUpperCase()} code opened. Edit and save to update component.`,
+                'Enable Auto-Sync',
+                'Manual Sync Only'
+            );
+            
+            // Set up enhanced file watcher with sync capabilities
+            if (originalDocument && webviewPanel) {
+                this.setupEnhancedCodeFileWatcher(
+                    tempDocument, 
+                    originalDocument,
+                    webviewPanel,
+                    componentId, 
+                    componentType, 
+                    language,
+                    action === 'Enable Auto-Sync'
+                );
+            }
+            
+            // Position cursor after header (skip metadata lines)
+            const headerLines = 6; // Number of header comment lines
+            const position = new vscode.Position(headerLines, 0);
+            editor.selection = new vscode.Selection(position, position);
+            editor.revealRange(new vscode.Range(position, position));
+            
+        } catch (error) {
+            console.error('Error opening enhanced code editor:', error);
+            vscode.window.showErrorMessage(`Error opening code editor: ${error}`);
+        }
+    }
+
+    // Generate helpful header for code files
+    private generateCodeFileHeader(componentId?: number, componentType?: string, language?: string): string {
+        const timestamp = new Date().toLocaleString();
+        return `/*
+ * VRM Component Code Editor
+ * Component ID: ${componentId || 'Unknown'}
+ * Component Type: ${componentType || 'Unknown'}
+ * Language: ${language || 'Unknown'}
+ * Generated: ${timestamp}
+ * 
+ * NOTE: This is a temporary file for editing component code.
+ * Changes will be synced back to the VRM file when you save.
+ * Do not move or rename this file.
+ */
+
+`;
+    }
+
+    // Enhanced code file watcher with auto-sync capabilities
+    private setupEnhancedCodeFileWatcher(
+        tempDoc: vscode.TextDocument, 
+        originalDoc: vscode.TextDocument,
+        webviewPanel: vscode.WebviewPanel,
+        componentId?: number, 
+        componentType?: string, 
+        language?: string,
+        autoSync: boolean = false
+    ): void {
+        const watcherKey = `${originalDoc.uri.fsPath}_${componentId}`;
+        
+        // Dispose existing watcher if it exists
+        if (this.codeEditorWatchers.has(watcherKey)) {
+            this.codeEditorWatchers.get(watcherKey)?.dispose();
+        }
+
+        const watcher = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+            if (savedDoc.uri.fsPath === tempDoc.uri.fsPath) {
+                try {
+                    console.log(`Code file saved for component ${componentId}, processing sync`);
+                    
+                    // Extract content (remove header)
+                    const fullContent = savedDoc.getText();
+                    const lines = fullContent.split('\n');
+                    const headerEndIndex = lines.findIndex(line => line.trim() === '') + 1;
+                    const actualContent = lines.slice(headerEndIndex).join('\n').trim();
+                    
+                    if (autoSync) {
+                        // Auto-sync: directly update the component
+                        await this.syncCodeBackToComponent(
+                            originalDoc, 
+                            componentId, 
+                            componentType, 
+                            actualContent,
+                            webviewPanel
+                        );
+                        
+                        vscode.window.showInformationMessage(
+                            `✅ ${componentType} ${language?.toUpperCase()} code auto-synced to component ${componentId}`
+                        );
+                    } else {
+                        // Manual sync: prompt user
+                        const action = await vscode.window.showInformationMessage(
+                            `💾 ${componentType} ${language?.toUpperCase()} code saved. Sync changes to component ${componentId}?`,
+                            'Sync Now',
+                            'Later',
+                            'Enable Auto-Sync'
+                        );
+                        
+                        if (action === 'Sync Now') {
+                            await this.syncCodeBackToComponent(
+                                originalDoc, 
+                                componentId, 
+                                componentType, 
+                                actualContent,
+                                webviewPanel
+                            );
+                            vscode.window.showInformationMessage(`✅ Changes synced to component ${componentId}`);
+                        } else if (action === 'Enable Auto-Sync') {
+                            // Update watcher to auto-sync
+                            this.setupEnhancedCodeFileWatcher(
+                                tempDoc, 
+                                originalDoc, 
+                                webviewPanel,
+                                componentId, 
+                                componentType, 
+                                language, 
+                                true
+                            );
+                            vscode.window.showInformationMessage('🔄 Auto-sync enabled for this code file');
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('Error handling code file save:', error);
+                    vscode.window.showErrorMessage(`Error syncing code changes: ${error}`);
+                }
+            }
+        });
+        
+        this.codeEditorWatchers.set(watcherKey, watcher);
+        this.context.subscriptions.push(watcher);
+    }
+
+    // Sync code changes back to VRM component
+    private async syncCodeBackToComponent(
+        document: vscode.TextDocument,
+        componentId?: number,
+        componentType?: string,
+        content?: string,
+        webviewPanel?: vscode.WebviewPanel
+    ): Promise<void> {
+        if (!componentId || !content) {
+            throw new Error('Invalid component ID or content for sync');
+        }
+
+        try {
+            // Parse current document to find the component
+            const parser = new ComponentParser();
+            const allComponents = parser.parseComponents(document.getText());
+            const component = allComponents.find(c => c.n === componentId);
+            
+            if (!component) {
+                throw new Error(`Component ${componentId} not found in document`);
+            }
+
+            // Update component values based on type
+            if (!component.values) {
+                component.values = {};
+            }
+
+            switch (componentType) {
+                case 'INSERTUPDATEQUERY':
+                case 'SELECTQUERY':
+                    component.values.query = content;
+                    break;
+                case 'SCRIPT':
+                    component.values.script = content;
+                    break;
+                default:
+                    throw new Error(`Unsupported component type for code sync: ${componentType}`);
+            }
+
+            // Update the component in the document
+            await this.updateComponent(document, component);
+            
+            // Refresh webview to show changes
+            if (webviewPanel) {
+                await this.updateWebview(webviewPanel, document);
+            }
+
+        } catch (error) {
+            console.error('Error syncing code back to component:', error);
+            throw error;
+        }
+    }
+
+    // Cleanup code editor watchers
+    private cleanupCodeEditorWatchers(documentPath: string): void {
+        const keysToRemove: string[] = [];
+        
+        this.codeEditorWatchers.forEach((watcher, key) => {
+            if (key.startsWith(documentPath)) {
+                try {
+                    watcher.dispose();
+                    keysToRemove.push(key);
+                    console.log('Cleaned up code editor watcher:', key);
+                } catch (error) {
+                    console.warn('Error disposing code editor watcher:', error);
+                }
+            }
+        });
+        
+        keysToRemove.forEach(key => {
+            this.codeEditorWatchers.delete(key);
+        });
     }
 
     private async openHtmlEditor(document: vscode.TextDocument): Promise<void> {
@@ -396,13 +687,9 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     console.log(`Syncing ${type.toUpperCase()} changes from temp file to VRM`);
                     
                     const vrmDocument = new VrmDocument(originalDoc);
-                    let updatedContent: string;
-                    
-                    if (type === 'html') {
-                        updatedContent = vrmDocument.updateHtmlContent(savedDoc.getText());
-                    } else {
-                        updatedContent = vrmDocument.updateJsContent(savedDoc.getText());
-                    }
+                    const updatedContent = type === 'html' 
+                        ? vrmDocument.updateHtmlContent(savedDoc.getText())
+                        : vrmDocument.updateJsContent(savedDoc.getText());
                     
                     const edit = new vscode.WorkspaceEdit();
                     edit.replace(
@@ -520,7 +807,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         }
     }
 
-    private cleanupWatchers(documentPath: string): void {
+    private cleanupTempFileWatchers(documentPath: string): void {
         const watchers = this.tempFileWatchers.get(documentPath);
         if (watchers) {
             watchers.forEach(watcher => {

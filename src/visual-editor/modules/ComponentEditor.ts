@@ -9,6 +9,670 @@ import {
 declare const window: CustomWindow;
 
 export class ComponentEditor implements IComponentEditor {
+    private monacoEditors: Map<string, any> = new Map();
+    private monacoLoaded: boolean = false;
+    private loadingPromise: Promise<void> | null = null;
+    
+    constructor() {
+        this.initializeMonaco();
+    }
+
+    // FIXED: Improved Monaco loading with better error handling
+    private async initializeMonaco(): Promise<void> {
+        if (this.loadingPromise) {
+            return this.loadingPromise;
+        }
+
+        this.loadingPromise = this.loadMonacoEditor();
+        return this.loadingPromise;
+    }
+
+    private async loadMonacoEditor(): Promise<void> {
+        if (this.monacoLoaded || (window as any).monaco) {
+            this.monacoLoaded = true;
+            console.log('✅ Monaco Editor already available');
+            return;
+        }
+
+        try {
+            console.log('🔄 Loading Monaco Editor...');
+
+            // FIXED: Load CSS first with proper error handling
+            await this.loadMonacoCSS();
+            
+            // FIXED: Load Monaco with improved loader
+            await this.loadMonacoScript();
+            
+            this.monacoLoaded = true;
+            console.log('✅ Monaco Editor loaded successfully');
+            
+        } catch (error) {
+            console.warn('⚠️ Failed to load Monaco Editor, will use fallback textareas:', error);
+            this.monacoLoaded = false;
+        }
+    }
+
+    // FIXED: Separate CSS loading with promise
+    private loadMonacoCSS(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            // Check if CSS already loaded
+            const existingLink = document.querySelector('link[href*="monaco-editor"]');
+            if (existingLink) {
+                resolve();
+                return;
+            }
+
+            const link = document.createElement('link');
+            link.rel = 'stylesheet';
+            link.href = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css';
+            
+            link.onload = () => {
+                console.log('✅ Monaco CSS loaded');
+                resolve();
+            };
+            link.onerror = () => {
+                console.warn('⚠️ Failed to load Monaco CSS');
+                reject(new Error('Monaco CSS failed to load'));
+            };
+            
+            document.head.appendChild(link);
+        });
+    }
+
+    // FIXED: Improved script loading
+    private loadMonacoScript(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            // Check if Monaco is already available
+            if ((window as any).monaco) {
+                resolve();
+                return;
+            }
+
+            const loaderScript = document.createElement('script');
+            loaderScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js';
+            
+            loaderScript.onload = () => {
+                console.log('✅ Monaco loader script loaded');
+                
+                // Configure and load Monaco
+                (window as any).require.config({ 
+                    paths: { 
+                        'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' 
+                    },
+                    'vs/nls': {
+                        availableLanguages: {
+                            '*': 'en'
+                        }
+                    }
+                });
+
+                (window as any).require(['vs/editor/editor.main'], () => {
+                    console.log('✅ Monaco editor main module loaded');
+                    resolve();
+                }, (error: any) => {
+                    console.error('❌ Monaco main module load failed:', error);
+                    reject(error);
+                });
+            };
+            
+            loaderScript.onerror = () => {
+                console.error('❌ Monaco loader script failed to load');
+                reject(new Error('Monaco loader script failed'));
+            };
+            
+            document.head.appendChild(loaderScript);
+        });
+    }
+
+    // FIXED: Completely rewritten Monaco editor creation with proper layout
+    private async createMonacoEditor(container: HTMLElement, content: string, language: string, editorId: string): Promise<void> {
+        if (!this.monacoLoaded || !(window as any).monaco) {
+            console.warn('Monaco not available, using fallback');
+            this.createFallbackTextarea(container, content, editorId);
+            return;
+        }
+
+        try {
+            const monaco = (window as any).monaco;
+            
+            // Dispose existing editor
+            if (this.monacoEditors.has(editorId)) {
+                this.monacoEditors.get(editorId).dispose();
+                this.monacoEditors.delete(editorId);
+            }
+
+            // FIXED: Clear container and set up proper structure
+            container.innerHTML = '';
+            container.style.cssText = `
+                width: 100%;
+                height: 400px;
+                position: relative;
+                overflow: hidden;
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
+            `;
+
+            // FIXED: Wait for container to be properly sized
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Get actual container dimensions
+            const rect = container.getBoundingClientRect();
+            const width = rect.width || 800;
+            const height = rect.height || 400;
+
+            console.log(`Creating Monaco editor ${editorId} with dimensions: ${width}x${height}`);
+
+            // FIXED: Create editor with optimized options
+            const editor = monaco.editor.create(container, {
+                value: content,
+                language: this.getMonacoLanguage(language),
+                theme: this.detectVSCodeTheme(),
+                
+                // FIXED: Layout options
+                automaticLayout: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                wordWrap: 'on',
+                wrappingStrategy: 'advanced',
+                
+                // FIXED: Font and sizing
+                fontSize: 14,
+                lineHeight: 20,
+                fontFamily: 'var(--vscode-editor-font-family, "Consolas", "SF Mono", "Monaco", "Inconsolata", "Fira Code", "Fira Mono", "Droid Sans Mono", "Source Code Pro", monospace)',
+                
+                // FIXED: Line numbers configuration
+                lineNumbers: 'on',
+                lineNumbersMinChars: 4,
+                lineDecorationsWidth: 8,
+                glyphMargin: false,
+                
+                // FIXED: Scrollbar configuration
+                scrollbar: {
+                    vertical: 'auto',
+                    horizontal: 'auto',
+                    verticalScrollbarSize: 12,
+                    horizontalScrollbarSize: 12,
+                    useShadows: false
+                },
+                
+                // FIXED: Selection and highlighting
+                selectionHighlight: true,
+                occurrencesHighlight: true,
+                renderLineHighlight: 'line',
+                cursorBlinking: 'blink',
+                
+                // FIXED: Other options
+                contextmenu: true,
+                folding: true,
+                foldingStrategy: 'indentation',
+                showFoldingControls: 'mouseover',
+                matchBrackets: 'always',
+                
+                // FIXED: Explicit dimensions
+                dimension: {
+                    width: width,
+                    height: height
+                }
+            });
+
+            // FIXED: Force layout after creation
+            setTimeout(() => {
+                editor.layout({ width, height });
+            }, 100);
+
+            // Store editor reference
+            this.monacoEditors.set(editorId, editor);
+
+            // FIXED: Set up change listener
+            editor.onDidChangeModelContent(() => {
+                const hiddenInput = document.getElementById(`${editorId}_value`) as HTMLInputElement;
+                if (hiddenInput) {
+                    hiddenInput.value = editor.getValue();
+                }
+                this.updateLineCount(editorId, editor.getValue());
+            });
+
+            // FIXED: Handle container resizing
+            if (typeof ResizeObserver !== 'undefined') {
+                const resizeObserver = new ResizeObserver(() => {
+                    const newRect = container.getBoundingClientRect();
+                    if (newRect.width > 0 && newRect.height > 0) {
+                        editor.layout({
+                            width: newRect.width,
+                            height: newRect.height
+                        });
+                    }
+                });
+                resizeObserver.observe(container);
+            }
+
+            // FIXED: Focus the editor
+            editor.focus();
+            
+            console.log(`✅ Monaco editor ${editorId} created successfully`);
+
+        } catch (error) {
+            console.error(`❌ Failed to create Monaco editor ${editorId}:`, error);
+            this.createFallbackTextarea(container, content, editorId);
+        }
+    }
+
+    // FIXED: Better language mapping
+    private getMonacoLanguage(language: string): string {
+        const languageMap: { [key: string]: string } = {
+            'sql': 'sql',
+            'pascal': 'pascal',
+            'javascript': 'javascript',
+            'typescript': 'typescript',
+            'python': 'python',
+            'csharp': 'csharp'
+        };
+        
+        return languageMap[language.toLowerCase()] || 'plaintext';
+    }
+
+    // FIXED: Improved theme detection
+    private detectVSCodeTheme(): string {
+        // Multiple methods to detect dark mode
+        const body = document.body;
+        const computedStyle = getComputedStyle(body);
+        
+        // Method 1: Check body classes
+        if (body.classList.contains('vscode-dark')) return 'vs-dark';
+        if (body.classList.contains('vscode-light')) return 'vs';
+        
+        // Method 2: Check CSS variables
+        const bgColor = computedStyle.getPropertyValue('--vscode-editor-background');
+        if (bgColor) {
+            // Parse RGB values to determine if dark
+            const rgb = bgColor.match(/\d+/g);
+            if (rgb && rgb.length >= 3) {
+                const luminance = (parseInt(rgb[0]) + parseInt(rgb[1]) + parseInt(rgb[2])) / 3;
+                return luminance < 128 ? 'vs-dark' : 'vs';
+            }
+        }
+        
+        // Method 3: Media query
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            return 'vs-dark';
+        }
+        
+        // Default to dark (most VS Code users prefer dark)
+        return 'vs-dark';
+    }
+
+    // FIXED: Enhanced fallback textarea
+    private createFallbackTextarea(container: HTMLElement, content: string, editorId: string): void {
+        console.log(`Creating fallback textarea for ${editorId}`);
+        
+        container.innerHTML = `
+            <div style="
+                display: flex;
+                height: 100%;
+                border: 1px solid var(--vscode-panel-border);
+                background-color: var(--vscode-editor-background);
+                overflow: hidden;
+            ">
+                <div class="line-numbers" id="${editorId}_line_numbers" style="
+                    background-color: var(--vscode-editorLineNumber-background, #1e1e1e);
+                    color: var(--vscode-editorLineNumber-foreground, #858585);
+                    font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+                    font-size: 14px;
+                    line-height: 20px;
+                    padding: 8px 12px 8px 8px;
+                    border-right: 1px solid var(--vscode-panel-border);
+                    user-select: none;
+                    white-space: pre;
+                    min-width: 50px;
+                    width: 50px;
+                    text-align: right;
+                    overflow: hidden;
+                    flex-shrink: 0;
+                ">1</div>
+                <textarea 
+                    id="${editorId}_textarea" 
+                    class="code-editor-textarea"
+                    style="
+                        flex: 1;
+                        border: none;
+                        background-color: var(--vscode-editor-background);
+                        color: var(--vscode-editor-foreground);
+                        font-family: var(--vscode-editor-font-family, 'Consolas', monospace);
+                        font-size: 14px;
+                        line-height: 20px;
+                        padding: 8px 12px;
+                        resize: none;
+                        outline: none;
+                        tab-size: 4;
+                        white-space: pre;
+                        overflow-wrap: normal;
+                        overflow-x: auto;
+                        margin: 0;
+                    "
+                >${content}</textarea>
+            </div>
+        `;
+
+        const textarea = document.getElementById(`${editorId}_textarea`) as HTMLTextAreaElement;
+        const lineNumbers = document.getElementById(`${editorId}_line_numbers`) as HTMLElement;
+        const hiddenInput = document.getElementById(`${editorId}_value`) as HTMLInputElement;
+        
+        if (textarea && hiddenInput) {
+            // Update hidden input on change
+            textarea.addEventListener('input', () => {
+                hiddenInput.value = textarea.value;
+                this.updateLineCount(editorId, textarea.value);
+                this.updateFallbackLineNumbers(textarea, lineNumbers);
+            });
+
+            // Sync scrolling between textarea and line numbers
+            textarea.addEventListener('scroll', () => {
+                if (lineNumbers) {
+                    lineNumbers.scrollTop = textarea.scrollTop;
+                }
+            });
+
+            // Initialize line numbers
+            this.updateFallbackLineNumbers(textarea, lineNumbers);
+        }
+    }
+
+    // FIXED: Line numbers for fallback
+    private updateFallbackLineNumbers(textarea: HTMLTextAreaElement, lineNumbers: HTMLElement): void {
+        if (!lineNumbers) return;
+        
+        const lines = textarea.value.split('\n').length;
+        const lineNumbersText = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+        lineNumbers.textContent = lineNumbersText;
+    }
+
+    // FIXED: Enhanced code editor HTML with better container structure
+    private generateCodeEditor(content: string, language: string, editorId: string, label: string): string {
+        return `
+            <div class="code-editor-container" style="
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                overflow: hidden;
+                background-color: var(--vscode-editor-background);
+                margin: 8px 0;
+                display: flex;
+                flex-direction: column;
+                width: 100%;
+                box-sizing: border-box;
+            ">
+                <div class="code-editor-header" style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 8px 12px;
+                    background-color: var(--vscode-panel-background);
+                    border-bottom: 1px solid var(--vscode-panel-border);
+                ">
+                    <span class="editor-label" style="
+                        color: var(--vscode-foreground);
+                        font-weight: 500;
+                        font-size: 12px;
+                    ">${label}</span>
+                    <button type="button" class="open-in-vscode-btn" onclick="openInVSCode('${editorId}', '${language}', '${label}')" style="
+                        background-color: var(--vscode-button-background);
+                        color: var(--vscode-button-foreground);
+                        border: none;
+                        padding: 6px 12px;
+                        border-radius: 3px;
+                        cursor: pointer;
+                        font-size: 11px;
+                        font-weight: 500;
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                        transition: all 0.2s ease;
+                    ">
+                        <span class="vscode-icon">🔧</span>
+                        Edit in VS Code
+                    </button>
+                </div>
+                <div class="code-editor-wrapper" style="
+                    position: relative;
+                    height: 400px;
+                    width: 100%;
+                    flex: 1;
+                    overflow: hidden;
+                ">
+                    <div id="${editorId}_container" style="
+                        height: 100%;
+                        width: 100%;
+                        position: relative;
+                    "></div>
+                </div>
+                <div class="code-editor-status" style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 4px 12px;
+                    background-color: var(--vscode-statusBar-background, #007ACC);
+                    color: var(--vscode-statusBar-foreground, white);
+                    font-size: 11px;
+                    border-top: 1px solid var(--vscode-panel-border);
+                ">
+                    <div class="editor-stats" style="display: flex; gap: 16px;">
+                        <span class="editor-language" style="font-weight: 500;">${language.toUpperCase()}</span>
+                        <span>Lines: <span id="${editorId}_lines">1</span></span>
+                    </div>
+                    <div>Monaco Editor ${this.monacoLoaded ? '✅' : '⚠️ Fallback'}</div>
+                </div>
+                <input type="hidden" id="${editorId}_value" value="${this.escapeHtml(content)}" />
+            </div>
+        `;
+    }
+
+    private escapeHtml(text: string): string {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // FIXED: Better line count updates
+    private updateLineCount(editorId: string, content: string): void {
+        const lineCountEl = document.getElementById(`${editorId}_lines`);
+        if (lineCountEl) {
+            const lines = content.split('\n').length;
+            lineCountEl.textContent = lines.toString();
+        }
+    }
+
+    // FIXED: Enhanced modal initialization
+    async showComponentEditor(component: VrmComponent): Promise<void> {
+        // Ensure Monaco is loaded
+        await this.initializeMonaco();
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.className = 'component-editor-modal';
+        modal.innerHTML = this.generateEditorModal(component);
+        
+        document.body.appendChild(modal);
+        window.currentEditingComponent = component;
+
+        // FIXED: Initialize editors with proper timing
+        setTimeout(async () => {
+            await this.initializeCodeEditors(component);
+        }, 150);
+    }
+
+    // FIXED: Better editor initialization
+    private async initializeCodeEditors(component: VrmComponent): Promise<void> {
+        console.log(`Initializing code editors for component ${component.n} (${component.t})`);
+
+        try {
+            // Initialize query editor for database components
+            if (['INSERTUPDATEQUERY', 'SELECTQUERY'].includes(component.t)) {
+                const queryContainer = document.getElementById('editQuery_container');
+                if (queryContainer && component.values?.query !== undefined) {
+                    console.log('Creating SQL query editor...');
+                    await this.createMonacoEditor(queryContainer, component.values.query || '', 'sql', 'editQuery');
+                    this.updateLineCount('editQuery', component.values.query || '');
+                }
+            }
+
+            // Initialize script editor for script components
+            if (component.t === 'SCRIPT') {
+                const scriptContainer = document.getElementById('editScript_container');
+                if (scriptContainer && component.values?.script !== undefined) {
+                    console.log('Creating Pascal script editor...');
+                    await this.createMonacoEditor(scriptContainer, component.values.script || '', 'pascal', 'editScript');
+                    this.updateLineCount('editScript', component.values.script || '');
+                }
+            }
+
+            console.log('✅ Code editors initialized successfully');
+
+        } catch (error) {
+            console.error('❌ Error initializing code editors:', error);
+        }
+    }
+
+    // FIXED: Enhanced cleanup
+    closeComponentEditor(): void {
+        const modal = document.querySelector('.component-editor-modal');
+        if (modal) {
+            // Dispose Monaco editors
+            this.monacoEditors.forEach((editor, id) => {
+                try {
+                    console.log(`Disposing Monaco editor: ${id}`);
+                    editor.dispose();
+                } catch (error) {
+                    console.warn(`Failed to dispose editor ${id}:`, error);
+                }
+            });
+            this.monacoEditors.clear();
+            
+            modal.remove();
+        }
+        window.currentEditingComponent = null;
+    }
+
+    // Enhanced save method to get values from Monaco editors
+    saveComponentChanges(componentId: number): void {
+        const component = window.currentEditingComponent;
+        if (!component) return;
+        
+        // Update common fields
+        this.updateCommonFields(component);
+        
+        // Update component-specific fields with Monaco content
+        this.updateComponentSpecificFieldsWithMonaco(component);
+        
+        // Send update to extension
+        let vscode = window.vscode;
+        if (!vscode && window.acquireVsCodeApi) {
+            try {
+                vscode = window.acquireVsCodeApi();
+                window.vscode = vscode;
+            } catch (error) {
+                console.warn('VS Code API already acquired, using existing instance');
+                vscode = window.vscode;
+            }
+        }
+        
+        if (vscode && vscode.postMessage) {
+            vscode.postMessage({
+                command: 'updateComponent',
+                component: component
+            });
+        }
+        
+        this.closeComponentEditor();
+    }
+
+    // Enhanced field update with Monaco support
+    private updateComponentSpecificFieldsWithMonaco(component: VrmComponent): void {
+        if (!component.values) {
+            component.values = {};
+        }
+        
+        switch (component.t) {
+            case 'INSERTUPDATEQUERY':
+            case 'SELECTQUERY':
+                this.updateQueryFieldsWithMonaco(component);
+                break;
+            case 'SCRIPT':
+                this.updateScriptFieldsWithMonaco(component);
+                break;
+            default:
+                this.updateComponentSpecificFields(component);
+                break;
+        }
+    }
+
+    private updateQueryFieldsWithMonaco(component: VrmComponent): void {
+        // Get value from Monaco editor or fallback input
+        const hiddenInput = document.getElementById('editQuery_value') as HTMLInputElement;
+        const textareaFallback = document.getElementById('editQuery_textarea') as HTMLTextAreaElement;
+        
+        if (hiddenInput) {
+            component.values!.query = hiddenInput.value;
+        } else if (textareaFallback) {
+            component.values!.query = textareaFallback.value;
+        }
+        
+        // Update parameters (existing logic)
+        const paramInputs = document.querySelectorAll('#parametersContainer .parameter-row');
+        component.values!.params = Array.from(paramInputs).map(row => {
+            const nameInput = row.querySelector('[data-param-field="name"]') as HTMLInputElement;
+            const typeSelect = row.querySelector('[data-param-field="type"]') as HTMLSelectElement;
+            const valueInput = row.querySelector('[data-param-field="value"]') as HTMLInputElement;
+            
+            return {
+                name: nameInput?.value || '',
+                type: typeSelect?.value as any || 'STRING',
+                value: valueInput?.value || ''
+            };
+        });
+    }
+
+    private updateScriptFieldsWithMonaco(component: VrmComponent): void {
+        const languageSelect = document.getElementById('editScriptLanguage') as HTMLSelectElement;
+        component.values!.language = languageSelect?.value || '';
+        
+        // Get value from Monaco editor or fallback input
+        const hiddenInput = document.getElementById('editScript_value') as HTMLInputElement;
+        const textareaFallback = document.getElementById('editScript_textarea') as HTMLTextAreaElement;
+        
+        if (hiddenInput) {
+            component.values!.script = hiddenInput.value;
+        } else if (textareaFallback) {
+            component.values!.script = textareaFallback.value;
+        }
+    }
+
+    // Global function for "Edit in VS Code" button
+    openInVSCode(editorId: string, language: string, label: string): void {
+        const hiddenInput = document.getElementById(`${editorId}_value`) as HTMLInputElement;
+        const editor = this.monacoEditors.get(editorId);
+        
+        let content = '';
+        if (editor) {
+            content = editor.getValue();
+        } else if (hiddenInput) {
+            content = hiddenInput.value;
+        }
+
+        const component = window.currentEditingComponent;
+        if (!component) return;
+
+        // Send message to extension to open external editor
+        let vscode = window.vscode;
+        if (vscode && vscode.postMessage) {
+            vscode.postMessage({
+                command: 'openCodeEditor',
+                content: content,
+                language: language,
+                filename: `component_${component.n}_${editorId}`,
+                componentId: component.n,
+                componentType: component.t
+            });
+        }
+    }
     
     showComponentDetails(component: VrmComponent): void {
         const detailsPanel = document.getElementById('componentDetails');
@@ -103,26 +767,6 @@ export class ComponentEditor implements IComponentEditor {
         detailsPanel.style.display = 'block';
     }
     
-    showComponentEditor(component: VrmComponent): void {
-        // Create modal editor based on component type
-        const modal = document.createElement('div');
-        modal.className = 'component-editor-modal';
-        modal.innerHTML = this.generateEditorModal(component);
-        
-        document.body.appendChild(modal);
-        
-        // Store current component for editing
-        window.currentEditingComponent = component;
-    }
-
-    closeComponentEditor(): void {
-        const modal = document.querySelector('.component-editor-modal');
-        if (modal) {
-            modal.remove();
-        }
-        window.currentEditingComponent = null;
-    }
-    
     addParameter(): void {
         const container = document.getElementById('parametersContainer');
         if (!container) return;
@@ -207,37 +851,6 @@ export class ComponentEditor implements IComponentEditor {
         }
     }
     
-    saveComponentChanges(componentId: number): void {
-        const component = window.currentEditingComponent;
-        if (!component) return;
-        
-        // Update common fields
-        this.updateCommonFields(component);
-        
-        // Update component-specific fields based on type
-        this.updateComponentSpecificFields(component);
-        
-        // Send update to extension
-        let vscode = window.vscode;
-        if (!vscode && window.acquireVsCodeApi) {
-            try {
-                vscode = window.acquireVsCodeApi();
-                window.vscode = vscode;
-            } catch (error) {
-                console.warn('VS Code API already acquired, using existing instance');
-                vscode = window.vscode;
-            }
-        }
-        
-        if (vscode && vscode.postMessage) {
-            vscode.postMessage({
-                command: 'updateComponent',
-                component: component
-            });
-        }
-        
-        this.closeComponentEditor();
-    }
 
     // =================================================================
     // PRIVATE HELPER METHODS - Component Details
@@ -617,11 +1230,12 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateQueryFields(component: VrmComponent): string {
         const values = component.values || {};
+        const queryContent = values.query || '';
         
         let html = `
             <div class="form-group">
                 <label>SQL Query:</label>
-                <textarea id="editQuery" rows="5">${values.query || ''}</textarea>
+                ${this.generateCodeEditor(queryContent, 'sql', 'editQuery', 'SQL Query')}
             </div>
             
             <div class="form-group">
@@ -659,8 +1273,10 @@ export class ComponentEditor implements IComponentEditor {
         return html;
     }
 
+    // FIXED: Modified script fields generation with Monaco
     private generateScriptFields(component: VrmComponent): string {
         const values = component.values || {};
+        const scriptContent = values.script || '';
         
         return `
             <div class="form-group">
@@ -673,7 +1289,7 @@ export class ComponentEditor implements IComponentEditor {
             
             <div class="form-group">
                 <label>Script:</label>
-                <textarea id="editScript" rows="10">${values.script || ''}</textarea>
+                ${this.generateCodeEditor(scriptContent, 'pascal', 'editScript', 'Script Code')}
             </div>
         `;
     }
