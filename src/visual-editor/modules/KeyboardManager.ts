@@ -1,28 +1,29 @@
-import { 
+import {
     IKeyboardManager,
     IStateManager,
     ISelectionManager,
     IRenderingManager,
     VrmComponent,
     VsCodeApi,
-    CustomWindow 
+    CustomWindow
 } from '../../types';
+import { VSCodeApiHandler } from '../../VSCodeApiHandler';
 
 declare const window: CustomWindow;
 
 export class KeyboardManager implements IKeyboardManager {
-    
+
     public handleKeyDown(e: KeyboardEvent): void {
         console.log('Key pressed:', e.key, 'Ctrl:', e.ctrlKey, 'Meta:', e.metaKey);
-        
+
         const stateManager: IStateManager = window.stateManager;
-        
+
         // Delete key - delete selected components
         if (e.key === 'Delete' && stateManager.getSelectedComponents().size > 0) {
             e.preventDefault();
             this.deleteSelectedComponents();
         }
-        
+
         // Escape key - clear selection
         if (e.key === 'Escape') {
             e.preventDefault();
@@ -30,7 +31,7 @@ export class KeyboardManager implements IKeyboardManager {
             selectionManager.clearSelection();
             console.log('Selection cleared');
         }
-        
+
         // Ctrl+A - select all components in current tab
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
             e.preventDefault();
@@ -39,73 +40,73 @@ export class KeyboardManager implements IKeyboardManager {
             selectionManager.selectAllComponents();
         }
     }
-    
+
     private deleteSelectedComponents(): void {
-    const stateManager: IStateManager = window.stateManager;
-    const selectedComponents = stateManager.getSelectedComponents();
-    
-    if (selectedComponents.size === 0) {
-        console.log('No components selected for deletion');
-        return;
-    }
-    
-    console.log('Deleting selected components:', selectedComponents);
-    
-    const componentsToDelete: VrmComponent[] = [];
-    const deletedIds: number[] = [];
-    
-    // Collect components to delete from both sections
-    selectedComponents.forEach((componentKey: string) => {
-        const [section, id] = componentKey.split('-');
-        const componentId = parseInt(id);
-        
-        const components = section === 'preproc' ? 
-            stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-        
-        const component = components.find((c: VrmComponent) => c.n === componentId);
-        if (component) {
-            componentsToDelete.push(component);
-            deletedIds.push(componentId);
+        const stateManager: IStateManager = window.stateManager;
+        const selectedComponents = stateManager.getSelectedComponents();
+
+        if (selectedComponents.size === 0) {
+            console.log('No components selected for deletion');
+            return;
         }
-    });
-    
-    if (componentsToDelete.length === 0) {
-        console.log('No valid components found for deletion');
-        return;
+
+        console.log('Deleting selected components:', selectedComponents);
+
+        const componentsToDelete: VrmComponent[] = [];
+        const deletedIds: number[] = [];
+
+        // Collect components to delete from both sections
+        selectedComponents.forEach((componentKey: string) => {
+            const [section, id] = componentKey.split('-');
+            const componentId = parseInt(id);
+
+            const components = section === 'preproc' ?
+                stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+
+            const component = components.find((c: VrmComponent) => c.n === componentId);
+            if (component) {
+                componentsToDelete.push(component);
+                deletedIds.push(componentId);
+            }
+        });
+
+        if (componentsToDelete.length === 0) {
+            console.log('No valid components found for deletion');
+            return;
+        }
+
+        // NO CONFIRMATION - Just delete immediately
+
+        // Perform deletion from state
+        this.removeComponentsFromState(componentsToDelete);
+
+        // Clean up connections that reference deleted components
+        this.cleanupConnectionsToDeletedComponents(deletedIds);
+
+        // Clear selection
+        const selectionManager: ISelectionManager = window.selectionManager;
+        selectionManager.clearSelection();
+
+        // Update component counts
+        stateManager.updateComponentCounts();
+
+        // Re-render both sections
+        const renderingManager: IRenderingManager = window.renderingManager;
+        renderingManager.renderComponentSection(stateManager.getPreprocComponents(), 'preprocCanvas');
+        renderingManager.renderComponentSection(stateManager.getPostprocComponents(), 'postprocCanvas');
+
+        // Send delete commands to extension
+        this.sendDeleteCommandsToExtension(componentsToDelete);
+
+        // Show success message
+        this.showMessage(`Deleted ${componentsToDelete.length} component(s)`);
+
+        console.log(`Successfully deleted ${componentsToDelete.length} components`);
     }
-    
-    // NO CONFIRMATION - Just delete immediately
-    
-    // Perform deletion from state
-    this.removeComponentsFromState(componentsToDelete);
-    
-    // Clean up connections that reference deleted components
-    this.cleanupConnectionsToDeletedComponents(deletedIds);
-    
-    // Clear selection
-    const selectionManager: ISelectionManager = window.selectionManager;
-    selectionManager.clearSelection();
-    
-    // Update component counts
-    stateManager.updateComponentCounts();
-    
-    // Re-render both sections
-    const renderingManager: IRenderingManager = window.renderingManager;
-    renderingManager.renderComponentSection(stateManager.getPreprocComponents(), 'preprocCanvas');
-    renderingManager.renderComponentSection(stateManager.getPostprocComponents(), 'postprocCanvas');
-    
-    // Send delete commands to extension
-    this.sendDeleteCommandsToExtension(componentsToDelete);
-    
-    // Show success message
-    this.showMessage(`Deleted ${componentsToDelete.length} component(s)`);
-    
-    console.log(`Successfully deleted ${componentsToDelete.length} components`);
-}
-    
+
     private removeComponentsFromState(componentsToDelete: VrmComponent[]): void {
         const stateManager: IStateManager = window.stateManager;
-        
+
         componentsToDelete.forEach(component => {
             if (component.section === 'preproc') {
                 const preprocComponents = stateManager.getPreprocComponents();
@@ -122,10 +123,10 @@ export class KeyboardManager implements IKeyboardManager {
             }
         });
     }
-    
+
     private cleanupConnectionsToDeletedComponents(deletedIds: number[]): void {
         const stateManager: IStateManager = window.stateManager;
-        
+
         // Clean up connections in preproc components
         stateManager.getPreprocComponents().forEach(component => {
             if (component.j) {
@@ -136,14 +137,14 @@ export class KeyboardManager implements IKeyboardManager {
                         connectionsChanged = true;
                     }
                 }
-                
+
                 // Send update if connections were changed
                 if (connectionsChanged) {
                     this.sendComponentUpdateToExtension(component);
                 }
             }
         });
-        
+
         // Clean up connections in postproc components
         stateManager.getPostprocComponents().forEach(component => {
             if (component.j) {
@@ -154,7 +155,7 @@ export class KeyboardManager implements IKeyboardManager {
                         connectionsChanged = true;
                     }
                 }
-                
+
                 // Send update if connections were changed
                 if (connectionsChanged) {
                     this.sendComponentUpdateToExtension(component);
@@ -162,53 +163,27 @@ export class KeyboardManager implements IKeyboardManager {
             }
         });
     }
-    
+
     private sendDeleteCommandsToExtension(componentsToDelete: VrmComponent[]): void {
-        // Get VS Code API safely
-        let vscode: VsCodeApi | undefined = window.vscode;
-        if (!vscode && window.acquireVsCodeApi) {
-            try {
-                vscode = window.acquireVsCodeApi();
-                window.vscode = vscode;
-            } catch (error) {
-                console.warn('VS Code API already acquired, using existing instance');
-                vscode = window.vscode;
-            }
-        }
-        
-        if (vscode && typeof vscode.postMessage === 'function') {
+        const apiHandler = window.vsCodeApiHandler;
+        if (apiHandler) {
             componentsToDelete.forEach(component => {
-                vscode!.postMessage({
-                    command: 'deleteComponent',
-                    component: component
-                });
+                apiHandler.deleteComponent(component);
             });
         } else {
-            console.warn('VS Code API not available, cannot send delete commands');
+            console.warn('VS Code API Handler not available, cannot send delete commands');
         }
     }
-    
+
     private sendComponentUpdateToExtension(component: VrmComponent): void {
-        // Get VS Code API safely
-        let vscode: VsCodeApi | undefined = window.vscode;
-        if (!vscode && window.acquireVsCodeApi) {
-            try {
-                vscode = window.acquireVsCodeApi();
-                window.vscode = vscode;
-            } catch (error) {
-                console.warn('VS Code API already acquired, using existing instance');
-                vscode = window.vscode;
-            }
-        }
-        
-        if (vscode && vscode.postMessage) {
-            vscode.postMessage({
-                command: 'updateComponent',
-                component: component
-            });
+        const apiHandler = window.vsCodeApiHandler;
+        if (apiHandler) {
+            apiHandler.updateComponent(component);
+        } else {
+            console.warn('VS Code API Handler not available, cannot send component update');
         }
     }
-    
+
     private showMessage(message: string): void {
         // Create message element
         const messageElement = document.createElement('div');
@@ -227,9 +202,9 @@ export class KeyboardManager implements IKeyboardManager {
         messageElement.style.fontFamily = 'var(--vscode-font-family)';
         messageElement.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
         messageElement.style.transition = 'opacity 0.3s ease';
-        
+
         document.body.appendChild(messageElement);
-        
+
         // Remove after 3 seconds
         setTimeout(() => {
             messageElement.style.opacity = '0';
@@ -240,7 +215,7 @@ export class KeyboardManager implements IKeyboardManager {
             }, 300);
         }, 3000);
     }
-    
+
     public initializeKeyboardHandlers(): void {
         const documentAny = document as any;
         if (!documentAny._vrmKeyboardHandlerAdded) {
@@ -249,7 +224,7 @@ export class KeyboardManager implements IKeyboardManager {
             console.log('Keyboard handlers attached');
         }
     }
-    
+
     public initializeGlobalClickHandler(): void {
         document.addEventListener('click', (e: MouseEvent) => {
             const stateManager: IStateManager = window.stateManager;
@@ -258,22 +233,22 @@ export class KeyboardManager implements IKeyboardManager {
             if (e.shiftKey) {
                 return;
             }
-            
+
             // Don't clear selection if we just finished a box selection
             if (stateManager.getJustFinishedSelecting()) {
                 return;
             }
-            
+
             // Don't clear selection if context menu is open or was just used
             if (stateManager.getIsContextMenuOpen()) {
                 return;
             }
-            
+
             const target = e.target as Element;
-            if (!target.closest('.component-details') && 
-                !target.closest('.component-node') && 
+            if (!target.closest('.component-details') &&
+                !target.closest('.component-node') &&
                 !target.closest('.selection-rect')) {
-                
+
                 // Only clear selection if not currently selecting
                 if (!stateManager.getIsSelecting()) {
                     const selectionManager: ISelectionManager = window.selectionManager;
@@ -282,7 +257,7 @@ export class KeyboardManager implements IKeyboardManager {
             }
         });
     }
-    
+
     public initializeDragPrevention(): void {
         const canvases = document.querySelectorAll('.component-canvas');
         canvases.forEach(canvas => {
@@ -290,7 +265,7 @@ export class KeyboardManager implements IKeyboardManager {
             canvas.addEventListener('selectstart', (e: Event) => e.preventDefault());
         });
     }
-    
+
     public static inject(): string {
         return `
             window.keyboardManager = new (${KeyboardManager.toString()})();

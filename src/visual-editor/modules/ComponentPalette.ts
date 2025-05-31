@@ -1,10 +1,11 @@
-import { 
+import {
     VrmComponent,
     IStateManager,
     IRenderingManager,
     VsCodeApi,
-    CustomWindow 
+    CustomWindow
 } from '../../types';
+import { VSCodeApiHandler } from '../../VSCodeApiHandler';
 
 declare const window: CustomWindow;
 
@@ -100,23 +101,23 @@ export class ComponentPalette {
         this.populateExistingPalette('componentPalettePostproc');
         this.setupPaletteEventHandlers();
     }
-    
+
     private populateExistingPalette(paletteId: string): void {
         const palette = document.getElementById(paletteId);
         if (!palette) {
             console.warn(`Palette ${paletteId} not found, creating content in existing structure`);
             return;
         }
-    
+
         const paletteContent = palette.querySelector('.palette-content');
         if (!paletteContent) {
             console.warn(`Palette content not found in ${paletteId}`);
             return;
         }
-    
+
         // FIXED: Just display all components in a single horizontal row - no categories at all
         let contentHTML = '';
-        
+
         this.componentDefinitions.forEach(comp => {
             contentHTML += `
                 <div class="palette-component" 
@@ -128,7 +129,7 @@ export class ComponentPalette {
                 </div>
             `;
         });
-        
+
         paletteContent.innerHTML = contentHTML;
     }
 
@@ -176,10 +177,10 @@ export class ComponentPalette {
             if (this.isDraggingFromPalette) {
                 return;
             }
-            
+
             const target = e.target as HTMLElement;
             const paletteComponent = target.closest('.palette-component') as HTMLElement;
-            
+
             if (paletteComponent) {
                 const componentType = paletteComponent.getAttribute('data-component-type');
                 if (componentType) {
@@ -231,7 +232,7 @@ export class ComponentPalette {
             const emptyImg = new Image();
             emptyImg.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=';
             e.dataTransfer.setDragImage(emptyImg, 0, 0);
-            
+
             e.dataTransfer.setData('text/plain', componentType);
             e.dataTransfer.effectAllowed = 'copy';
         }
@@ -243,10 +244,10 @@ export class ComponentPalette {
     private createPaletteGhost(componentType: string): void {
         // FIXED: Remove any existing ghost first
         this.cleanupPaletteGhost();
-        
+
         const ghost = document.createElement('div');
         ghost.className = 'palette-ghost';
-        
+
         const componentDef = this.componentDefinitions.find(c => c.type === componentType);
         if (componentDef) {
             ghost.innerHTML = `
@@ -270,7 +271,7 @@ export class ComponentPalette {
         ghost.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
         // FIXED: Start hidden until first mouse move
         ghost.style.visibility = 'hidden';
-        
+
         document.body.appendChild(ghost);
         this.paletteGhost = ghost;
     }
@@ -288,7 +289,7 @@ export class ComponentPalette {
         // FIXED: Prevent double insertion by checking if drop actually happened on canvas
         const target = e.target as HTMLElement;
         const canvas = target.closest('.component-canvas') as HTMLElement;
-        
+
         if (!canvas || !this.draggedComponentType) {
             console.log('Drop not on canvas or no component type, ignoring');
             return;
@@ -298,26 +299,26 @@ export class ComponentPalette {
         const canvasRect = canvas.getBoundingClientRect();
         const x = e.clientX - canvasRect.left;
         const y = e.clientY - canvasRect.top;
-        
+
         console.log(`Dropping ${this.draggedComponentType} at (${x}, ${y})`);
-        
+
         // FIXED: Set a flag to prevent click insertion
         this.isDraggingFromPalette = false; // Mark as not dragging before insertion
         this.insertComponentAtPosition(this.draggedComponentType, x, y);
-        
+
         // FIXED: Clear the dragged component type immediately to prevent double insertion
         this.draggedComponentType = null;
     }
 
     private insertComponentAtPosition(componentType: string, x: number, y: number): void {
         const stateManager: IStateManager = window.stateManager;
-        
+
         // Snap to grid
         const snapped = stateManager.snapToGrid(x, y);
-        
+
         // Get current section components
         const currentSection = stateManager.getActiveTab() as 'preproc' | 'postproc';
-        const existingComponents = currentSection === 'preproc' ? 
+        const existingComponents = currentSection === 'preproc' ?
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
 
         try {
@@ -329,10 +330,10 @@ export class ComponentPalette {
 
             // Create new component using template
             const newComponent = ComponentTemplates.createComponent(
-                componentType, 
-                currentSection, 
-                existingComponents, 
-                snapped.x, 
+                componentType,
+                currentSection,
+                existingComponents,
+                snapped.x,
                 snapped.y
             );
 
@@ -351,9 +352,9 @@ export class ComponentPalette {
             // Re-render the current section
             const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = currentSection + 'Canvas';
-            const components = currentSection === 'preproc' ? 
+            const components = currentSection === 'preproc' ?
                 stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-            
+
             renderingManager.renderComponentSection(components, canvasId);
 
             // Send to extension to update VRM file
@@ -375,19 +376,19 @@ export class ComponentPalette {
     private getComponentTemplatesClass(): any {
         // Try multiple ways to access ComponentTemplates
         const windowAny = window as any;
-        
+
         // Method 1: Direct property access
         if (windowAny.ComponentTemplates) {
             console.log('Found ComponentTemplates via direct access');
             return windowAny.ComponentTemplates;
         }
-        
+
         // Method 2: Check if it's nested somewhere
         if (windowAny.ComponentTemplate_1) {
             console.log('Found ComponentTemplates as ComponentTemplate_1');
             return windowAny.ComponentTemplate_1;
         }
-        
+
         // Method 3: Try to find it in the global scope by name
         try {
             const globalComponentTemplates = eval('ComponentTemplates');
@@ -398,7 +399,7 @@ export class ComponentPalette {
         } catch (e) {
             // Eval failed, continue
         }
-        
+
         // Method 4: Last resort - create inline templates
         console.warn('ComponentTemplates not found, creating inline fallback');
         return this.createInlineComponentTemplates();
@@ -424,7 +425,7 @@ export class ComponentPalette {
                 };
 
                 const nextId = getNextComponentId(existingComponents);
-                
+
                 // Create basic template for any component type
                 const baseComponent: VrmComponent = {
                     n: nextId,
@@ -530,25 +531,11 @@ export class ComponentPalette {
     }
 
     private saveNewComponent(component: VrmComponent): void {
-        // Get VS Code API safely
-        let vscode: VsCodeApi | undefined = window.vscode;
-        if (!vscode && window.acquireVsCodeApi) {
-            try {
-                vscode = window.acquireVsCodeApi();
-                window.vscode = vscode;
-            } catch (error) {
-                console.warn('VS Code API already acquired, using existing instance');
-                vscode = window.vscode;
-            }
-        }
-
-        if (vscode && vscode.postMessage) {
-            vscode.postMessage({
-                command: 'addComponent',
-                component: component
-            });
+        const apiHandler = window.vsCodeApiHandler;
+        if (apiHandler) {
+            apiHandler.addComponent(component);
         } else {
-            console.warn('VS Code API not available, cannot save new component');
+            console.warn('VS Code API Handler not available, cannot save new component');
         }
     }
 
@@ -568,9 +555,9 @@ export class ComponentPalette {
         messageElement.style.fontFamily = 'var(--vscode-font-family)';
         messageElement.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
         messageElement.style.maxWidth = '300px';
-        
+
         document.body.appendChild(messageElement);
-        
+
         setTimeout(() => {
             messageElement.style.opacity = '0';
             messageElement.style.transition = 'opacity 0.3s ease';
@@ -586,7 +573,7 @@ export class ComponentPalette {
         const palette = document.getElementById('componentPalette');
         if (palette) {
             palette.classList.toggle('collapsed');
-            
+
             const toggleButton = palette.querySelector('.palette-toggle') as HTMLElement;
             if (toggleButton) {
                 toggleButton.textContent = palette.classList.contains('collapsed') ? '▶' : '◀';

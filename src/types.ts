@@ -1,4 +1,5 @@
 // types.ts - Centralized type definitions
+import { VSCodeApiHandler } from './VSCodeApiHandler';
 
 // VS Code API interface
 export interface VsCodeApi {
@@ -35,40 +36,40 @@ export interface ComponentValues {
     conditions?: string[];  // Legacy IF conditions (keeping for backward compatibility)
     query?: string;        // INSERTUPDATEQUERY, SELECTQUERY
     params?: ComponentParameter[];  // INSERTUPDATEQUERY, SELECTQUERY parameters
-    
+
     // Component-specific values based on your documentation
-    
+
     // CSF (Script Function) Component - alternating n/v pairs
     functionName?: string;     // First n tag
     returnValue?: string;      // First v tag  
     functionParams?: CsfParameter[];  // Additional n/v pairs
-    
+
     // SQLTRN (SQL Transaction) Component
     transactionName?: string;  // n tag (can be empty)
     transactionType?: string;  // t tag (Begin/Commit/Rollback)
-    
+
     // MATH Component
     mathName?: string;         // n tag
     mathFormat?: string;       // f tag (INTEGER, LONGDATETIME, etc.)
     mathParam?: string;        // v tag
-    
+
     // TEMPLATE Component  
     templateName?: string;     // n tag
     templateTarget?: string;   // t tag
-    
+
     // SCRIPT Component
     script?: string;           // v tag content
     language?: string;         // lng tag (Pascal)
-    
+
     // ERROR Component
     errorMessage?: string;     // v tag content
-    
+
     // IF Component
     condition?: string;        // v tag content (single condition)
-    
+
     // SET (Multi-Set) Component - multiple n/v pairs
     variables?: SetVariable[]; // Array of name/value pairs
-    
+
     // EXTERNAL Component
     externalValue?: string;    // v tag (displayed as "Rule name" in UI)
 }
@@ -248,7 +249,8 @@ export interface CustomWindow extends Window {
     keyboardManager: IKeyboardManager;
     vscode?: VsCodeApi;
     acquireVsCodeApi?: () => VsCodeApi;
-    
+    vsCodeApiHandler?: VSCodeApiHandler;
+
     // Global functions exposed to HTML
     zoomIn?: () => void;
     zoomOut?: () => void;
@@ -277,7 +279,7 @@ export interface CustomWindow extends Window {
     addSetVariable?: () => void;
     removeSetVariable?: (index: number) => void;
     saveComponentChanges?: (componentId: number) => void;
-    
+
     // Temporary storage
     currentEditingComponent?: VrmComponent | null;
 }

@@ -1,10 +1,12 @@
 // Enhanced ComponentEditor with support for all component types
-import { 
+import {
     VrmComponent,
     IComponentEditor,
     IStateManager,
-    CustomWindow 
+    CustomWindow,
+    VsCodeApi
 } from '../../types';
+import { VSCodeApiHandler } from '../../VSCodeApiHandler';
 
 declare const window: CustomWindow;
 
@@ -12,7 +14,7 @@ export class ComponentEditor implements IComponentEditor {
     private monacoEditors: Map<string, any> = new Map();
     private monacoLoaded: boolean = false;
     private loadingPromise: Promise<void> | null = null;
-    
+
     constructor() {
         this.initializeMonaco();
     }
@@ -39,13 +41,13 @@ export class ComponentEditor implements IComponentEditor {
 
             // FIXED: Load CSS first with proper error handling
             await this.loadMonacoCSS();
-            
+
             // FIXED: Load Monaco with improved loader
             await this.loadMonacoScript();
-            
+
             this.monacoLoaded = true;
             console.log('✅ Monaco Editor loaded successfully');
-            
+
         } catch (error) {
             console.warn('⚠️ Failed to load Monaco Editor, will use fallback textareas:', error);
             this.monacoLoaded = false;
@@ -65,7 +67,7 @@ export class ComponentEditor implements IComponentEditor {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
             link.href = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css';
-            
+
             link.onload = () => {
                 console.log('✅ Monaco CSS loaded');
                 resolve();
@@ -74,7 +76,7 @@ export class ComponentEditor implements IComponentEditor {
                 console.warn('⚠️ Failed to load Monaco CSS');
                 reject(new Error('Monaco CSS failed to load'));
             };
-            
+
             document.head.appendChild(link);
         });
     }
@@ -90,14 +92,14 @@ export class ComponentEditor implements IComponentEditor {
 
             const loaderScript = document.createElement('script');
             loaderScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js';
-            
+
             loaderScript.onload = () => {
                 console.log('✅ Monaco loader script loaded');
-                
+
                 // Configure and load Monaco
-                (window as any).require.config({ 
-                    paths: { 
-                        'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs' 
+                (window as any).require.config({
+                    paths: {
+                        'vs': 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs'
                     },
                     'vs/nls': {
                         availableLanguages: {
@@ -114,12 +116,12 @@ export class ComponentEditor implements IComponentEditor {
                     reject(error);
                 });
             };
-            
+
             loaderScript.onerror = () => {
                 console.error('❌ Monaco loader script failed to load');
                 reject(new Error('Monaco loader script failed'));
             };
-            
+
             document.head.appendChild(loaderScript);
         });
     }
@@ -134,7 +136,7 @@ export class ComponentEditor implements IComponentEditor {
 
         try {
             const monaco = (window as any).monaco;
-            
+
             // Dispose existing editor
             if (this.monacoEditors.has(editorId)) {
                 this.monacoEditors.get(editorId).dispose();
@@ -167,25 +169,25 @@ export class ComponentEditor implements IComponentEditor {
                 value: content,
                 language: this.getMonacoLanguage(language),
                 theme: this.detectVSCodeTheme(),
-                
+
                 // FIXED: Layout options
                 automaticLayout: true,
                 minimap: { enabled: false },
                 scrollBeyondLastLine: false,
                 wordWrap: 'on',
                 wrappingStrategy: 'advanced',
-                
+
                 // FIXED: Font and sizing
                 fontSize: 14,
                 lineHeight: 20,
                 fontFamily: 'var(--vscode-editor-font-family, "Consolas", "SF Mono", "Monaco", "Inconsolata", "Fira Code", "Fira Mono", "Droid Sans Mono", "Source Code Pro", monospace)',
-                
+
                 // FIXED: Line numbers configuration
                 lineNumbers: 'on',
                 lineNumbersMinChars: 4,
                 lineDecorationsWidth: 8,
                 glyphMargin: false,
-                
+
                 // FIXED: Scrollbar configuration
                 scrollbar: {
                     vertical: 'auto',
@@ -194,20 +196,20 @@ export class ComponentEditor implements IComponentEditor {
                     horizontalScrollbarSize: 12,
                     useShadows: false
                 },
-                
+
                 // FIXED: Selection and highlighting
                 selectionHighlight: true,
                 occurrencesHighlight: true,
                 renderLineHighlight: 'line',
                 cursorBlinking: 'blink',
-                
+
                 // FIXED: Other options
                 contextmenu: true,
                 folding: true,
                 foldingStrategy: 'indentation',
                 showFoldingControls: 'mouseover',
                 matchBrackets: 'always',
-                
+
                 // FIXED: Explicit dimensions
                 dimension: {
                     width: width,
@@ -248,7 +250,7 @@ export class ComponentEditor implements IComponentEditor {
 
             // FIXED: Focus the editor
             editor.focus();
-            
+
             console.log(`✅ Monaco editor ${editorId} created successfully`);
 
         } catch (error) {
@@ -267,7 +269,7 @@ export class ComponentEditor implements IComponentEditor {
             'python': 'python',
             'csharp': 'csharp'
         };
-        
+
         return languageMap[language.toLowerCase()] || 'plaintext';
     }
 
@@ -276,11 +278,11 @@ export class ComponentEditor implements IComponentEditor {
         // Multiple methods to detect dark mode
         const body = document.body;
         const computedStyle = getComputedStyle(body);
-        
+
         // Method 1: Check body classes
         if (body.classList.contains('vscode-dark')) return 'vs-dark';
         if (body.classList.contains('vscode-light')) return 'vs';
-        
+
         // Method 2: Check CSS variables
         const bgColor = computedStyle.getPropertyValue('--vscode-editor-background');
         if (bgColor) {
@@ -291,12 +293,12 @@ export class ComponentEditor implements IComponentEditor {
                 return luminance < 128 ? 'vs-dark' : 'vs';
             }
         }
-        
+
         // Method 3: Media query
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             return 'vs-dark';
         }
-        
+
         // Default to dark (most VS Code users prefer dark)
         return 'vs-dark';
     }
@@ -304,7 +306,7 @@ export class ComponentEditor implements IComponentEditor {
     // FIXED: Enhanced fallback textarea
     private createFallbackTextarea(container: HTMLElement, content: string, editorId: string): void {
         console.log(`Creating fallback textarea for ${editorId}`);
-        
+
         container.innerHTML = `
             <div style="
                 display: flex;
@@ -356,7 +358,7 @@ export class ComponentEditor implements IComponentEditor {
         const textarea = document.getElementById(`${editorId}_textarea`) as HTMLTextAreaElement;
         const lineNumbers = document.getElementById(`${editorId}_line_numbers`) as HTMLElement;
         const hiddenInput = document.getElementById(`${editorId}_value`) as HTMLInputElement;
-        
+
         if (textarea && hiddenInput) {
             // Update hidden input on change
             textarea.addEventListener('input', () => {
@@ -380,7 +382,7 @@ export class ComponentEditor implements IComponentEditor {
     // FIXED: Line numbers for fallback
     private updateFallbackLineNumbers(textarea: HTMLTextAreaElement, lineNumbers: HTMLElement): void {
         if (!lineNumbers) return;
-        
+
         const lines = textarea.value.split('\n').length;
         const lineNumbersText = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
         lineNumbers.textContent = lineNumbersText;
@@ -484,12 +486,12 @@ export class ComponentEditor implements IComponentEditor {
     async showComponentEditor(component: VrmComponent): Promise<void> {
         // Ensure Monaco is loaded
         await this.initializeMonaco();
-        
+
         // Create modal
         const modal = document.createElement('div');
         modal.className = 'component-editor-modal';
         modal.innerHTML = this.generateEditorModal(component);
-        
+
         document.body.appendChild(modal);
         window.currentEditingComponent = component;
 
@@ -545,7 +547,7 @@ export class ComponentEditor implements IComponentEditor {
                 }
             });
             this.monacoEditors.clear();
-            
+
             modal.remove();
         }
         window.currentEditingComponent = null;
@@ -555,32 +557,21 @@ export class ComponentEditor implements IComponentEditor {
     saveComponentChanges(componentId: number): void {
         const component = window.currentEditingComponent;
         if (!component) return;
-        
+
         // Update common fields
         this.updateCommonFields(component);
-        
+
         // Update component-specific fields with Monaco content
         this.updateComponentSpecificFieldsWithMonaco(component);
-        
+
         // Send update to extension
-        let vscode = window.vscode;
-        if (!vscode && window.acquireVsCodeApi) {
-            try {
-                vscode = window.acquireVsCodeApi();
-                window.vscode = vscode;
-            } catch (error) {
-                console.warn('VS Code API already acquired, using existing instance');
-                vscode = window.vscode;
-            }
+        const apiHandler = window.vsCodeApiHandler;
+        if (apiHandler) {
+            apiHandler.updateComponent(component);
+        } else {
+            console.warn('VS Code API Handler not available, cannot save component changes');
         }
-        
-        if (vscode && vscode.postMessage) {
-            vscode.postMessage({
-                command: 'updateComponent',
-                component: component
-            });
-        }
-        
+
         this.closeComponentEditor();
     }
 
@@ -589,7 +580,7 @@ export class ComponentEditor implements IComponentEditor {
         if (!component.values) {
             component.values = {};
         }
-        
+
         switch (component.t) {
             case 'INSERTUPDATEQUERY':
             case 'SELECTQUERY':
@@ -608,20 +599,20 @@ export class ComponentEditor implements IComponentEditor {
         // Get value from Monaco editor or fallback input
         const hiddenInput = document.getElementById('editQuery_value') as HTMLInputElement;
         const textareaFallback = document.getElementById('editQuery_textarea') as HTMLTextAreaElement;
-        
+
         if (hiddenInput) {
             component.values!.query = hiddenInput.value;
         } else if (textareaFallback) {
             component.values!.query = textareaFallback.value;
         }
-        
+
         // Update parameters (existing logic)
         const paramInputs = document.querySelectorAll('#parametersContainer .parameter-row');
         component.values!.params = Array.from(paramInputs).map(row => {
             const nameInput = row.querySelector('[data-param-field="name"]') as HTMLInputElement;
             const typeSelect = row.querySelector('[data-param-field="type"]') as HTMLSelectElement;
             const valueInput = row.querySelector('[data-param-field="value"]') as HTMLInputElement;
-            
+
             return {
                 name: nameInput?.value || '',
                 type: typeSelect?.value as any || 'STRING',
@@ -633,11 +624,11 @@ export class ComponentEditor implements IComponentEditor {
     private updateScriptFieldsWithMonaco(component: VrmComponent): void {
         const languageSelect = document.getElementById('editScriptLanguage') as HTMLSelectElement;
         component.values!.language = languageSelect?.value || '';
-        
+
         // Get value from Monaco editor or fallback input
         const hiddenInput = document.getElementById('editScript_value') as HTMLInputElement;
         const textareaFallback = document.getElementById('editScript_textarea') as HTMLTextAreaElement;
-        
+
         if (hiddenInput) {
             component.values!.script = hiddenInput.value;
         } else if (textareaFallback) {
@@ -649,7 +640,7 @@ export class ComponentEditor implements IComponentEditor {
     openInVSCode(editorId: string, language: string, label: string): void {
         const hiddenInput = document.getElementById(`${editorId}_value`) as HTMLInputElement;
         const editor = this.monacoEditors.get(editorId);
-        
+
         let content = '';
         if (editor) {
             content = editor.getValue();
@@ -673,13 +664,13 @@ export class ComponentEditor implements IComponentEditor {
             });
         }
     }
-    
+
     showComponentDetails(component: VrmComponent): void {
         const detailsPanel = document.getElementById('componentDetails');
         const detailsContent = document.getElementById('detailsContent');
-        
+
         if (!detailsPanel || !detailsContent) return;
-        
+
         let html = `
             <div class="detail-row">
                 <span class="detail-label">Section:</span>
@@ -706,11 +697,11 @@ export class ComponentEditor implements IComponentEditor {
                 <span class="detail-value">${this.getWatchpointDisplay(component.wp)}</span>
             </div>
         `;
-        
+
         // Enhanced connection display
         const primaryConnection = component.j && component.j[0] ? component.j[0] : 'None';
         const secondaryConnection = component.j && component.j[1] ? component.j[1] : 'None';
-        
+
         html += `
             <div class="detail-row">
                 <span class="detail-label">Primary Connection:</span>
@@ -721,10 +712,10 @@ export class ComponentEditor implements IComponentEditor {
                 <span class="detail-value" style="color: #666;">${secondaryConnection}</span>
             </div>
         `;
-        
+
         // Add component-specific details
         html += this.generateComponentSpecificDetails(component);
-        
+
         html += `
             <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border);">
                 <div style="font-size: 11px; color: var(--vscode-descriptionForeground); margin-bottom: 5px;"><strong>Connection Controls:</strong></div>
@@ -736,7 +727,7 @@ export class ComponentEditor implements IComponentEditor {
             </div>
             <div style="margin-top: 10px;"><small>Double-click component to edit</small></div>
         `;
-        
+
         detailsContent.innerHTML = html;
         detailsPanel.style.display = 'block';
     }
@@ -744,9 +735,9 @@ export class ComponentEditor implements IComponentEditor {
     showMultiSelectionDetails(): void {
         const detailsPanel = document.getElementById('componentDetails');
         const detailsContent = document.getElementById('detailsContent');
-        
+
         if (!detailsPanel || !detailsContent) return;
-        
+
         const stateManager: IStateManager = window.stateManager;
         const count = stateManager.getSelectedComponents().size;
         let html = `
@@ -758,19 +749,19 @@ export class ComponentEditor implements IComponentEditor {
                 <span class="detail-value">${stateManager.getActiveTab().toUpperCase()}</span>
             </div>
         `;
-        
+
         if (count > 1) {
             html += '<div class="selection-instructions">Drag any selected component to move all selected components together</div>';
         }
-        
+
         detailsContent.innerHTML = html;
         detailsPanel.style.display = 'block';
     }
-    
+
     addParameter(): void {
         const container = document.getElementById('parametersContainer');
         if (!container) return;
-        
+
         const paramCount = container.children.length;
         const paramRow = document.createElement('div');
         paramRow.className = 'parameter-row';
@@ -790,11 +781,11 @@ export class ComponentEditor implements IComponentEditor {
         `;
         container.appendChild(paramRow);
     }
-    
+
     removeParameter(index: number): void {
         const container = document.getElementById('parametersContainer');
         if (!container) return;
-        
+
         const rows = container.querySelectorAll('.parameter-row');
         if (rows[index]) {
             rows[index].remove();
@@ -804,7 +795,7 @@ export class ComponentEditor implements IComponentEditor {
     addCsfParameter(): void {
         const container = document.getElementById('csfParametersContainer');
         if (!container) return;
-        
+
         const paramCount = container.children.length;
         const paramRow = document.createElement('div');
         paramRow.className = 'parameter-row';
@@ -815,11 +806,11 @@ export class ComponentEditor implements IComponentEditor {
         `;
         container.appendChild(paramRow);
     }
-    
+
     removeCsfParameter(index: number): void {
         const container = document.getElementById('csfParametersContainer');
         if (!container) return;
-        
+
         const rows = container.querySelectorAll('.parameter-row');
         if (rows[index]) {
             rows[index].remove();
@@ -829,7 +820,7 @@ export class ComponentEditor implements IComponentEditor {
     addSetVariable(): void {
         const container = document.getElementById('setVariablesContainer');
         if (!container) return;
-        
+
         const varCount = container.children.length;
         const varRow = document.createElement('div');
         varRow.className = 'parameter-row';
@@ -840,17 +831,17 @@ export class ComponentEditor implements IComponentEditor {
         `;
         container.appendChild(varRow);
     }
-    
+
     removeSetVariable(index: number): void {
         const container = document.getElementById('setVariablesContainer');
         if (!container) return;
-        
+
         const rows = container.querySelectorAll('.parameter-row');
         if (rows[index]) {
             rows[index].remove();
         }
     }
-    
+
 
     // =================================================================
     // PRIVATE HELPER METHODS - Component Details
@@ -858,7 +849,7 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateComponentSpecificDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         switch (component.t) {
             case 'CSF':
                 return this.generateCsfDetails(component);
@@ -888,75 +879,75 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateCsfDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Script Function:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Function: ${component.values.functionName || 'None'}</div>`;
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Return: ${component.values.returnValue || 'None'}</div>`;
-        
+
         if (component.values.functionParams && component.values.functionParams.length > 0) {
             html += '<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Parameters:</div>';
             component.values.functionParams.forEach(param => {
                 html += `<div style="margin-left: 25px; font-size: 10px; color: var(--vscode-descriptionForeground);">${param.label}: ${param.value}</div>`;
             });
         }
-        
+
         return html;
     }
 
     private generateSqlTrnDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">SQL Transaction:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Name: ${component.values.transactionName || 'None'}</div>`;
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Type: ${component.values.transactionType || 'None'}</div>`;
-        
+
         return html;
     }
 
     private generateMathDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Math Operation:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Name: ${component.values.mathName || 'None'}</div>`;
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Format: ${component.values.mathFormat || 'None'}</div>`;
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Parameter: ${component.values.mathParam || 'None'}</div>`;
-        
+
         return html;
     }
 
     private generateTemplateDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Template:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Name: ${component.values.templateName || 'None'}</div>`;
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Target: ${component.values.templateTarget || 'None'}</div>`;
-        
+
         return html;
     }
 
     private generateQueryDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Database Query:</span></div>';
         if (component.values.query) {
             html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Query: ${component.values.query.substring(0, 50)}${component.values.query.length > 50 ? '...' : ''}</div>`;
         } else {
             html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Query: Empty</div>`;
         }
-        
+
         if (component.values.params && component.values.params.length > 0) {
             html += '<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Parameters:</div>';
             component.values.params.forEach(param => {
                 html += `<div style="margin-left: 25px; font-size: 10px; color: var(--vscode-descriptionForeground);">${param.name} (${param.type})</div>`;
             });
         }
-        
+
         return html;
     }
 
     private generateScriptDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Script:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Language: ${component.values.language || 'None'}</div>`;
         if (component.values.script) {
@@ -964,51 +955,51 @@ export class ComponentEditor implements IComponentEditor {
         } else {
             html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Script: Empty</div>`;
         }
-        
+
         return html;
     }
 
     private generateErrorDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Error:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Message: ${component.values.errorMessage || 'None'}</div>`;
-        
+
         return html;
     }
 
     private generateIfDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Condition:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">${component.values.condition || 'None'}</div>`;
-        
+
         return html;
     }
 
     private generateSetDetails(component: VrmComponent): string {
         if (!component.values || !component.values.variables) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Variables:</span></div>';
         component.values.variables.forEach(variable => {
             html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">${variable.name}: ${variable.value}</div>`;
         });
-        
+
         return html;
     }
 
     private generateExternalDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">External Call:</span></div>';
         html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">Rule Name: ${component.values.externalValue || 'None'}</div>`;
-        
+
         return html;
     }
 
     private generateLegacyDetails(component: VrmComponent): string {
         if (!component.values) return '';
-        
+
         let html = '<div class="detail-row"><span class="detail-label">Values:</span></div>';
         if (component.values.conditions) {
             html += `<div style="margin-left: 15px; font-size: 11px; color: var(--vscode-descriptionForeground);">${component.values.conditions[0]}</div>`;
@@ -1022,7 +1013,7 @@ export class ComponentEditor implements IComponentEditor {
                 html += `<div style="margin-left: 25px; font-size: 10px; color: var(--vscode-descriptionForeground);">${param.name} (${param.type})</div>`;
             });
         }
-        
+
         return html;
     }
 
@@ -1124,7 +1115,7 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateCsfFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         let html = `
             <div class="form-group">
                 <label>Function Name:</label>
@@ -1140,7 +1131,7 @@ export class ComponentEditor implements IComponentEditor {
                 <label>Function Parameters:</label>
                 <div id="csfParametersContainer">
         `;
-        
+
         if (values.functionParams) {
             values.functionParams.forEach((param, index) => {
                 html += `
@@ -1152,7 +1143,7 @@ export class ComponentEditor implements IComponentEditor {
                 `;
             });
         }
-        
+
         html += `
                 </div>
                 <div class="add-button-container">
@@ -1160,13 +1151,13 @@ export class ComponentEditor implements IComponentEditor {
                 </div>
             </div>
         `;
-        
+
         return html;
     }
 
     private generateSqlTrnFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         return `
             <div class="form-group">
                 <label>Transaction Name:</label>
@@ -1187,7 +1178,7 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateMathFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         return `
             <div class="form-group">
                 <label>Name:</label>
@@ -1216,7 +1207,7 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateTemplateFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         return `
             <div class="form-group">
                 <label>Template Name:</label>
@@ -1233,7 +1224,7 @@ export class ComponentEditor implements IComponentEditor {
     private generateQueryFields(component: VrmComponent): string {
         const values = component.values || {};
         const queryContent = values.query || '';
-        
+
         let html = `
             <div class="form-group">
                 <label>SQL Query:</label>
@@ -1244,7 +1235,7 @@ export class ComponentEditor implements IComponentEditor {
                 <label>Parameters:</label>
                 <div id="parametersContainer">
         `;
-        
+
         if (values.params) {
             values.params.forEach((param, index) => {
                 html += `
@@ -1265,7 +1256,7 @@ export class ComponentEditor implements IComponentEditor {
                 `;
             });
         }
-        
+
         html += `
                 </div>
                 <div class="add-button-container">
@@ -1273,7 +1264,7 @@ export class ComponentEditor implements IComponentEditor {
                 </div>
             </div>
         `;
-        
+
         return html;
     }
 
@@ -1281,7 +1272,7 @@ export class ComponentEditor implements IComponentEditor {
     private generateScriptFields(component: VrmComponent): string {
         const values = component.values || {};
         const scriptContent = values.script || '';
-        
+
         return `
             <div class="form-group">
                 <label>Language:</label>
@@ -1300,7 +1291,7 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateErrorFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         return `
             <div class="form-group">
                 <label>Error Message:</label>
@@ -1311,7 +1302,7 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateIfFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         return `
             <div class="form-group">
                 <label>Condition:</label>
@@ -1322,13 +1313,13 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateSetFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         let html = `
             <div class="form-group">
                 <label>Variables:</label>
                 <div id="setVariablesContainer">
         `;
-        
+
         if (values.variables) {
             values.variables.forEach((variable, index) => {
                 html += `
@@ -1340,7 +1331,7 @@ export class ComponentEditor implements IComponentEditor {
                 `;
             });
         }
-        
+
         html += `
                 </div>
                 <div class="add-button-container">
@@ -1348,13 +1339,13 @@ export class ComponentEditor implements IComponentEditor {
                 </div>
             </div>
         `;
-        
+
         return html;
     }
 
     private generateExternalFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         return `
             <div class="form-group">
                 <label>Rule Name:</label>
@@ -1365,9 +1356,9 @@ export class ComponentEditor implements IComponentEditor {
 
     private generateLegacyFields(component: VrmComponent): string {
         const values = component.values || {};
-        
+
         let html = '';
-        
+
         if (values.conditions) {
             html += `
                 <div class="form-group">
@@ -1376,7 +1367,7 @@ export class ComponentEditor implements IComponentEditor {
                 </div>
             `;
         }
-        
+
         if (values.query !== undefined) {
             html += `
                 <div class="form-group">
@@ -1384,14 +1375,14 @@ export class ComponentEditor implements IComponentEditor {
                     <textarea id="editQuery" rows="5">${values.query || ''}</textarea>
                 </div>
             `;
-            
+
             if (values.params) {
                 html += `
                     <div class="form-group">
                         <label>Parameters:</label>
                         <div id="parametersContainer">
                 `;
-                
+
                 values.params.forEach((param: any, index: number) => {
                     html += `
                         <div class="parameter-row">
@@ -1407,7 +1398,7 @@ export class ComponentEditor implements IComponentEditor {
                         </div>
                     `;
                 });
-                
+
                 html += `
                         </div>
                         <div class="add-button-container">
@@ -1417,7 +1408,7 @@ export class ComponentEditor implements IComponentEditor {
                 `;
             }
         }
-        
+
         return html;
     }
 
@@ -1430,30 +1421,30 @@ export class ComponentEditor implements IComponentEditor {
         const watchpointSelect = document.getElementById('editWatchpoint') as HTMLSelectElement;
         const primaryConnectionInput = document.getElementById('editPrimaryConnection') as HTMLInputElement;
         const secondaryConnectionInput = document.getElementById('editSecondaryConnection') as HTMLInputElement;
-        
+
         // Update comment
         component.c = commentInput?.value || '';
-        
+
         // Update watchpoint
         if (watchpointSelect) {
             const watchpointValue = watchpointSelect.value;
             component.wp = watchpointValue === 'null' ? null : watchpointValue === 'true';
         }
-        
+
         // Update connections
         if (!component.j) {
             component.j = [];
         }
-        
+
         // Ensure j array has at least 2 elements
         while (component.j.length < 2) {
             component.j.push(0);
         }
-        
+
         // Update primary connection
         const primaryValue = primaryConnectionInput?.value ? parseInt(primaryConnectionInput.value) : 0;
         component.j[0] = isNaN(primaryValue) ? 0 : primaryValue;
-        
+
         // Update secondary connection
         const secondaryValue = secondaryConnectionInput?.value ? parseInt(secondaryConnectionInput.value) : 0;
         component.j[1] = isNaN(secondaryValue) ? 0 : secondaryValue;
@@ -1463,7 +1454,7 @@ export class ComponentEditor implements IComponentEditor {
         if (!component.values) {
             component.values = {};
         }
-        
+
         switch (component.t) {
             case 'CSF':
                 this.updateCsfFields(component);
@@ -1505,16 +1496,16 @@ export class ComponentEditor implements IComponentEditor {
     private updateCsfFields(component: VrmComponent): void {
         const functionNameInput = document.getElementById('editFunctionName') as HTMLInputElement;
         const returnValueInput = document.getElementById('editReturnValue') as HTMLTextAreaElement;
-        
+
         component.values!.functionName = functionNameInput?.value || '';
         component.values!.returnValue = returnValueInput?.value || '';
-        
+
         // Update function parameters
         const paramInputs = document.querySelectorAll('#csfParametersContainer .parameter-row');
         component.values!.functionParams = Array.from(paramInputs).map(row => {
             const labelInput = row.querySelector('[data-param-field="label"]') as HTMLInputElement;
             const valueInput = row.querySelector('[data-param-field="value"]') as HTMLTextAreaElement;
-            
+
             return {
                 label: labelInput?.value || '',
                 value: valueInput?.value || ''
@@ -1525,7 +1516,7 @@ export class ComponentEditor implements IComponentEditor {
     private updateSqlTrnFields(component: VrmComponent): void {
         const nameInput = document.getElementById('editTransactionName') as HTMLInputElement;
         const typeSelect = document.getElementById('editTransactionType') as HTMLSelectElement;
-        
+
         component.values!.transactionName = nameInput?.value || '';
         component.values!.transactionType = typeSelect?.value || '';
     }
@@ -1534,7 +1525,7 @@ export class ComponentEditor implements IComponentEditor {
         const nameInput = document.getElementById('editMathName') as HTMLInputElement;
         const formatSelect = document.getElementById('editMathFormat') as HTMLSelectElement;
         const paramInput = document.getElementById('editMathParam') as HTMLInputElement;
-        
+
         component.values!.mathName = nameInput?.value || '';
         component.values!.mathFormat = formatSelect?.value || '';
         component.values!.mathParam = paramInput?.value || '';
@@ -1543,23 +1534,23 @@ export class ComponentEditor implements IComponentEditor {
     private updateTemplateFields(component: VrmComponent): void {
         const nameInput = document.getElementById('editTemplateName') as HTMLInputElement;
         const targetInput = document.getElementById('editTemplateTarget') as HTMLInputElement;
-        
+
         component.values!.templateName = nameInput?.value || '';
         component.values!.templateTarget = targetInput?.value || '';
     }
 
     private updateQueryFields(component: VrmComponent): void {
         const queryInput = document.getElementById('editQuery') as HTMLTextAreaElement;
-        
+
         component.values!.query = queryInput?.value || '';
-        
+
         // Update parameters
         const paramInputs = document.querySelectorAll('#parametersContainer .parameter-row');
         component.values!.params = Array.from(paramInputs).map(row => {
             const nameInput = row.querySelector('[data-param-field="name"]') as HTMLInputElement;
             const typeSelect = row.querySelector('[data-param-field="type"]') as HTMLSelectElement;
             const valueInput = row.querySelector('[data-param-field="value"]') as HTMLInputElement;
-            
+
             return {
                 name: nameInput?.value || '',
                 type: typeSelect?.value as any || 'STRING',
@@ -1571,7 +1562,7 @@ export class ComponentEditor implements IComponentEditor {
     private updateScriptFields(component: VrmComponent): void {
         const languageSelect = document.getElementById('editScriptLanguage') as HTMLSelectElement;
         const scriptInput = document.getElementById('editScript') as HTMLTextAreaElement;
-        
+
         component.values!.language = languageSelect?.value || '';
         component.values!.script = scriptInput?.value || '';
     }
@@ -1591,7 +1582,7 @@ export class ComponentEditor implements IComponentEditor {
         component.values!.variables = Array.from(varInputs).map(row => {
             const nameInput = row.querySelector('[data-var-field="name"]') as HTMLInputElement;
             const valueInput = row.querySelector('[data-var-field="value"]') as HTMLInputElement;
-            
+
             return {
                 name: nameInput?.value || '',
                 value: valueInput?.value || ''
@@ -1610,13 +1601,13 @@ export class ComponentEditor implements IComponentEditor {
         if (conditionInput && component.values!.conditions) {
             component.values!.conditions = [conditionInput.value];
         }
-        
+
         // Update query if exists
         const queryInput = document.getElementById('editQuery') as HTMLTextAreaElement;
         if (queryInput && component.values!.query !== undefined) {
             component.values!.query = queryInput.value;
         }
-        
+
         // Update parameters if they exist
         const paramInputs = document.querySelectorAll('#parametersContainer .parameter-row');
         if (paramInputs.length > 0 && component.values!.params) {
@@ -1624,7 +1615,7 @@ export class ComponentEditor implements IComponentEditor {
                 const nameInput = row.querySelector('[data-param-field="name"]') as HTMLInputElement;
                 const typeSelect = row.querySelector('[data-param-field="type"]') as HTMLSelectElement;
                 const valueInput = row.querySelector('[data-param-field="value"]') as HTMLInputElement;
-                
+
                 return {
                     name: nameInput?.value || '',
                     type: typeSelect?.value as any || 'STRING',

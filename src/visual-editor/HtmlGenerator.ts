@@ -560,6 +560,7 @@ export class HtmlGenerator {
                 // FIXED: Simplified Monaco status tracking - only show errors
                 let monacoCheckAttempts = 0;
                 const MAX_CHECK_ATTEMPTS = 75; // 15 seconds at 200ms intervals
+                let monacoInitialized = false;
                 
                 // Update Monaco status indicator - only show errors
                 function updateMonacoStatus(status, message) {
@@ -580,6 +581,12 @@ export class HtmlGenerator {
                 
                 // FIXED: Simplified Monaco monitoring - fail silently unless real error
                 function startMonacoMonitoring() {
+                    // If Monaco is already initialized, don't start monitoring again
+                    if (monacoInitialized || window.monaco) {
+                        console.log('✅ Monaco Editor already available');
+                        return;
+                    }
+
                     console.log('🔍 Starting Monaco availability monitoring...');
                     
                     // Hide status initially
@@ -595,6 +602,7 @@ export class HtmlGenerator {
                         if (window.monaco || 
                             (window.componentEditor && typeof window.componentEditor.createMonacoEditor === 'function')) {
                             clearInterval(checkInterval);
+                            monacoInitialized = true;
                             console.log('✅ Monaco Editor available');
                             return;
                         }
@@ -606,6 +614,7 @@ export class HtmlGenerator {
                             // Final check - if ComponentEditor exists at all, assume it works
                             if (window.componentEditor) {
                                 console.log('🔧 ComponentEditor available, Monaco will load on demand');
+                                monacoInitialized = true;
                                 return;
                             }
                             
@@ -715,20 +724,24 @@ export class HtmlGenerator {
                 
                 // FIXED: Simplified initialization - no visible status unless error
                 document.addEventListener('DOMContentLoaded', function() {
-                    console.log('🚀 Enhanced VRM Editor with Monaco support initializing...');
-                    
-                    // Start Monaco monitoring (silent unless error)
-                    startMonacoMonitoring();
-                    
-                    // Initialize other components
-                    setTimeout(() => {
-                        if (typeof renderComponents === 'function') {
-                            console.log('Initializing component rendering...');
-                        }
-                    }, 100);
+                    // Only initialize if not already done
+                    if (!window.vrmEditorInitialized) {
+                        console.log('🚀 Enhanced VRM Editor with Monaco support initializing...');
+                        window.vrmEditorInitialized = true;
+                        
+                        // Start Monaco monitoring (silent unless error)
+                        startMonacoMonitoring();
+                        
+                        // Initialize other components
+                        setTimeout(() => {
+                            if (typeof renderComponents === 'function') {
+                                console.log('Initializing component rendering...');
+                            }
+                        }, 100);
+                    } else {
+                        console.log('VRM Editor already initialized, skipping initialization');
+                    }
                 });
-                
-                // Remove the componentEditorReady listener - not needed with simplified approach
                 
                 // Global keyboard shortcuts
                 document.addEventListener('keydown', function(e) {
@@ -786,7 +799,7 @@ export class HtmlGenerator {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Enhanced VRM Editor with Monaco</title>
+            <title>VRM Editor</title>
             
             <!-- Preload Monaco Editor for better performance -->
             <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/editor/editor.main.min.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
@@ -993,14 +1006,18 @@ export class HtmlGenerator {
             </div>
             
             <script>
-                const vscode = acquireVsCodeApi();
+                // VSCodeApiHandler will be injected by VrmEditorProvider
                 
                 function openHtml() {
-                    vscode.postMessage({ command: 'openHtml' });
+                    if (window.vsCodeApiHandler) {
+                        window.vsCodeApiHandler.openHtmlEditor();
+                    }
                 }
                 
                 function openJs() {
-                    vscode.postMessage({ command: 'openJs' });
+                    if (window.vsCodeApiHandler) {
+                        window.vsCodeApiHandler.openJsEditor();
+                    }
                 }
                 
                 // FIXED: Simplified Monaco status tracking for main view - only show errors
@@ -1070,6 +1087,26 @@ export class HtmlGenerator {
                     checkMainMonacoStatus();
                 });
                 
+                // Handle component position updates efficiently
+                function handleComponentPositionUpdate(message) {
+                    const component = document.querySelector(
+                        '[data-component-id="' + message.componentId + '"][data-section="' + message.section + '"]'
+                    );
+                    if (component) {
+                        // Get current position
+                        const currentX = parseFloat(component.getAttribute('data-x') || '0');
+                        const currentY = parseFloat(component.getAttribute('data-y') || '0');
+                        
+                        // Only update if the position has actually changed
+                        if (currentX !== message.x || currentY !== message.y) {
+                            // Update position directly without transitions
+                            component.style.transform = 'translate(' + message.x + 'px, ' + message.y + 'px)';
+                            component.setAttribute('data-x', message.x);
+                            component.setAttribute('data-y', message.y);
+                        }
+                    }
+                }
+
                 // Handle messages from extension
                 window.addEventListener('message', event => {
                     const message = event.data;
@@ -1078,6 +1115,9 @@ export class HtmlGenerator {
                             if (typeof renderComponents === 'function') {
                                 renderComponents(message.components);
                             }
+                            break;
+                        case 'updateComponentPosition':
+                            handleComponentPositionUpdate(message);
                             break;
                         case 'monacoError':
                             updateMainMonacoStatus('error', '⚠️ Enhanced editing unavailable');

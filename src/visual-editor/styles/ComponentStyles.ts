@@ -2,7 +2,6 @@ export function getComponentStyles(): string {
     return `
         .component-node {
             cursor: pointer;
-            transition: all 0.2s ease;
         }
         
         .component-node:hover {
@@ -11,8 +10,8 @@ export function getComponentStyles(): string {
         
         .component-node.dragging {
             cursor: grabbing;
-            opacity: 0.8;
-            filter: brightness(1.2);
+            transform-origin: 0 0;
+            will-change: transform;
         }
         
         .component-node.selected {
@@ -46,7 +45,6 @@ export function getComponentStyles(): string {
             stroke: var(--vscode-panel-border);
             stroke-width: 2;
             rx: 6;
-            transition: all 0.2s ease;
         }
         
         .component-text {
