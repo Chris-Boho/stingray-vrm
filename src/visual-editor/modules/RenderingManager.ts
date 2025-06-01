@@ -383,8 +383,17 @@ export class RenderingManager implements IRenderingManager {
         if (canvasElement._vrmMouseUpHandler) {
             canvas.removeEventListener('mouseup', canvasElement._vrmMouseUpHandler);
         }
+        if (canvasElement._vrmContextMenuHandler) {
+            canvas.removeEventListener('contextmenu', canvasElement._vrmContextMenuHandler);
+        }
 
         // Create new handlers and store references
+        canvasElement._vrmContextMenuHandler = (e: MouseEvent) => {
+            if (e.target === canvas) {
+                contextMenuManager.handleRightClick(e);
+            }
+        };
+
         canvasElement._vrmMouseDownHandler = (e: MouseEvent) => {
             if (e.target === canvas) {
                 // Handle shift+click on empty canvas for clearing connections
@@ -417,6 +426,7 @@ export class RenderingManager implements IRenderingManager {
         canvas.addEventListener('mousedown', canvasElement._vrmMouseDownHandler);
         canvas.addEventListener('mousemove', canvasElement._vrmMouseMoveHandler);
         canvas.addEventListener('mouseup', canvasElement._vrmMouseUpHandler);
+        canvas.addEventListener('contextmenu', canvasElement._vrmContextMenuHandler);
     }
 
     public static inject(): string {

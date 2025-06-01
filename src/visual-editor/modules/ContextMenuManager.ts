@@ -163,116 +163,81 @@ export class ContextMenuManager implements IContextMenuManager {
                 hasSubmenu: true,
                 submenuItems: [
                     {
-                        text: 'Database Components',
-                        icon: '🗄️',
-                        hasSubmenu: true,
-                        submenuItems: [
-                            {
-                                text: 'SQL Transaction',
-                                icon: '🔄',
-                                action: () => {
-                                    this.insertComponent('SQLTRN', 'SQL Transaction');
-                                }
-                            },
-                            {
-                                text: 'Select Query',
-                                icon: '🔍',
-                                action: () => {
-                                    this.insertComponent('SELECTQUERY', 'Select Query');
-                                }
-                            },
-                            {
-                                text: 'Insert/Update Query',
-                                icon: '📝',
-                                action: () => {
-                                    this.insertComponent('INSERTUPDATEQUERY', 'Insert/Update Query');
-                                }
-                            }
-                        ]
+                        text: 'SQL Transaction',
+                        icon: '🔄',
+                        action: () => {
+                            this.insertComponent('SQLTRN', 'SQL Transaction');
+                        }
                     },
                     {
-                        text: 'Script Components',
+                        text: 'Select Query',
+                        icon: '🔍',
+                        action: () => {
+                            this.insertComponent('SELECTQUERY', 'Select Query');
+                        }
+                    },
+                    {
+                        text: 'Insert/Update Query',
+                        icon: '📝',
+                        action: () => {
+                            this.insertComponent('INSERTUPDATEQUERY', 'Insert/Update Query');
+                        }
+                    },
+                    {
+                        text: 'Script Function',
+                        icon: '⚙️',
+                        action: () => {
+                            this.insertComponent('CSF', 'Script Function');
+                        }
+                    },
+                    {
+                        text: 'Script Block',
                         icon: '💻',
-                        hasSubmenu: true,
-                        submenuItems: [
-                            {
-                                text: 'Script Function',
-                                icon: '⚙️',
-                                action: () => {
-                                    this.insertComponent('CSF', 'Script Function');
-                                }
-                            },
-                            {
-                                text: 'Script Block',
-                                icon: '💻',
-                                action: () => {
-                                    this.insertComponent('SCRIPT', 'Script Block');
-                                }
-                            }
-                        ]
+                        action: () => {
+                            this.insertComponent('SCRIPT', 'Script Block');
+                        }
                     },
                     {
-                        text: 'Control Components',
-                        icon: '🎛️',
-                        hasSubmenu: true,
-                        submenuItems: [
-                            {
-                                text: 'Condition (IF)',
-                                icon: '❓',
-                                action: () => {
-                                    this.insertComponent('IF', 'Condition (IF)');
-                                }
-                            },
-                            {
-                                text: 'Error Component',
-                                icon: '⚠️',
-                                action: () => {
-                                    this.insertComponent('ERROR', 'Error Component');
-                                }
-                            }
-                        ]
+                        text: 'Condition (IF)',
+                        icon: '❓',
+                        action: () => {
+                            this.insertComponent('IF', 'Condition (IF)');
+                        }
                     },
                     {
-                        text: 'Data Components',
+                        text: 'Error Component',
+                        icon: '⚠️',
+                        action: () => {
+                            this.insertComponent('ERROR', 'Error Component');
+                        }
+                    },
+                    {
+                        text: 'Multi-Set Variables',
                         icon: '📊',
-                        hasSubmenu: true,
-                        submenuItems: [
-                            {
-                                text: 'Multi-Set Variables',
-                                icon: '📊',
-                                action: () => {
-                                    this.insertComponent('SET', 'Multi-Set Variables');
-                                }
-                            },
-                            {
-                                text: 'Math Operation',
-                                icon: '🔢',
-                                action: () => {
-                                    this.insertComponent('MATH', 'Math Operation');
-                                }
-                            }
-                        ]
+                        action: () => {
+                            this.insertComponent('SET', 'Multi-Set Variables');
+                        }
                     },
                     {
-                        text: 'Integration Components',
-                        icon: '🔗',
-                        hasSubmenu: true,
-                        submenuItems: [
-                            {
-                                text: 'External Call',
-                                icon: '🌐',
-                                action: () => {
-                                    this.insertComponent('EXTERNAL', 'External Call');
-                                }
-                            },
-                            {
-                                text: 'Template',
-                                icon: '📋',
-                                action: () => {
-                                    this.insertComponent('TEMPLATE', 'Template');
-                                }
-                            }
-                        ]
+                        text: 'Math Operation',
+                        icon: '🔢',
+                        action: () => {
+                            this.insertComponent('MATH', 'Math Operation');
+                        }
+                    },
+                    {
+                        text: 'External Call',
+                        icon: '🌐',
+                        action: () => {
+                            this.insertComponent('EXTERNAL', 'External Call');
+                        }
+                    },
+                    {
+                        text: 'Template',
+                        icon: '📋',
+                        action: () => {
+                            this.insertComponent('TEMPLATE', 'Template');
+                        }
                     }
                 ]
             }

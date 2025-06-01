@@ -235,20 +235,17 @@ export class DocumentState {
   public getComponentColor(componentType: string): string {
     // Map component types to colors
     const colorMap: { [key: string]: string } = {
-      'CSF': '#4FC3F7',  // Light blue
-      'CSV': '#81C784',  // Light green
-      'CSL': '#FFB74D',  // Light orange
-      'CSD': '#E57373',  // Light red
-      'CSP': '#BA68C8',  // Light purple
-      'CST': '#4DB6AC',  // Teal
-      'CSW': '#FFD54F',  // Amber
-      'CSR': '#7986CB',  // Indigo
-      'CSE': '#9575CD',  // Deep purple
-      'CSN': '#4DD0E1',  // Cyan
-      'CSM': '#FF8A65',  // Deep orange
-      'CSK': '#A1887F',  // Brown
-      'CSH': '#90A4AE',  // Blue grey
-      'CSG': '#AED581'   // Light green
+      'SQLTRN': '#4FC3F7',      // Light blue for SQL transactions
+      'CSF': '#81C784',         // Light green for script functions
+      'SCRIPT': '#FFB74D',      // Light orange for script blocks
+      'ERROR': '#E57373',       // Light red for error handling
+      'IF': '#BA68C8',          // Light purple for conditional logic
+      'MATH': '#4DB6AC',        // Teal for mathematical operations
+      'SET': '#FFD54F',         // Amber for variable assignment
+      'EXTERNAL': '#7986CB',    // Indigo for external rule calls
+      'TEMPLATE': '#9575CD',    // Deep purple for template processing
+      'INSERTUPDATEQUERY': '#4DD0E1',  // Cyan for database inserts/updates
+      'SELECTQUERY': '#AED581'  // Light green for database selects
     };
 
     return colorMap[componentType] || '#9E9E9E'; // Default to grey if type not found
