@@ -4,7 +4,9 @@ import {
     IComponentEditor,
     IStateManager,
     CustomWindow,
-    VsCodeApi
+    VsCodeApi,
+    IRenderingManager,
+    ISelectionManager
 } from '../../types';
 import { VSCodeApiHandler } from '../../VSCodeApiHandler';
 
@@ -571,6 +573,49 @@ export class ComponentEditor implements IComponentEditor {
         } else {
             console.warn('VS Code API Handler not available, cannot save component changes');
         }
+
+        // Get state manager to access components
+        const stateManager: IStateManager = window.stateManager;
+        const renderingManager: IRenderingManager = window.renderingManager;
+
+        // Get all components in the same section
+        const sectionComponents = component.section === 'preproc' ?
+            stateManager.getPreprocComponents() :
+            stateManager.getPostprocComponents();
+
+        // Find components that need to be re-rendered:
+        // 1. The updated component
+        // 2. Any components that connect to this component
+        // 3. Any components this component connects to
+        const componentsToUpdate = new Set<VrmComponent>();
+        componentsToUpdate.add(component);
+
+        // Find components that connect to this component
+        sectionComponents.forEach(c => {
+            if (c.j && (c.j[0] === component.n || c.j[1] === component.n)) {
+                componentsToUpdate.add(c);
+            }
+        });
+
+        // Find components this component connects to
+        if (component.j) {
+            component.j.forEach(targetId => {
+                if (targetId > 0) {
+                    const targetComponent = sectionComponents.find(c => c.n === targetId);
+                    if (targetComponent) {
+                        componentsToUpdate.add(targetComponent);
+                    }
+                }
+            });
+        }
+
+        // Re-render the section with updated components
+        const canvasId = component.section + 'Canvas';
+        renderingManager.renderComponentSection(sectionComponents, canvasId);
+
+        // Restore any selection states
+        const selectionManager: ISelectionManager = window.selectionManager;
+        selectionManager.restoreSelectionStates();
 
         this.closeComponentEditor();
     }
