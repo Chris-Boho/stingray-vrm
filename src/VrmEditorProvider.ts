@@ -9,6 +9,8 @@ import { ComponentParser } from './visual-editor/ComponentParser';
 import { VrmDocument } from './VrmDocument';
 import { VrmComponent } from './types';
 import { VSCodeApiHandler } from './VSCodeApiHandler';
+import { SaveManager } from './visual-editor/modules/SaveManager';
+import { DocumentState } from './visual-editor/modules/DocumentState';
 
 export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private static readonly viewType = 'vrmEditor.vrmEditor';
@@ -16,11 +18,15 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private tempFileWatchers: Map<string, vscode.Disposable[]> = new Map();
     private codeEditorWatchers: Map<string, vscode.Disposable> = new Map();
     private vscodeApiHandler: VSCodeApiHandler;
+    private saveManager: SaveManager;
+    private documentState: DocumentState;
     private originalComponents: Map<number, VrmComponent> = new Map();
     private lastUpdatedComponent: VrmComponent | null = null;
 
     constructor(private context: vscode.ExtensionContext) {
         this.vscodeApiHandler = VSCodeApiHandler.getInstance();
+        this.saveManager = SaveManager.getInstance();
+        this.documentState = DocumentState.getInstance();
     }
 
     public static register(context: vscode.ExtensionContext): vscode.Disposable {
@@ -43,6 +49,14 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
+        // Register the webview panel with VSCodeApiHandler
+        this.vscodeApiHandler.registerWebviewPanel(document.uri.toString(), webviewPanel);
+
+        // Set up webview panel disposal handler
+        webviewPanel.onDidDispose(() => {
+            this.vscodeApiHandler.unregisterWebviewPanel(document.uri.toString());
+        });
+
         // Set up webview options
         webviewPanel.webview.options = {
             enableScripts: true,
@@ -51,12 +65,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             ]
         };
 
-        // Inject VSCodeApiHandler into webview
-        const apiHandlerScript = VSCodeApiHandler.inject();
-        webviewPanel.webview.html = webviewPanel.webview.html.replace(
-            '</head>',
-            `<script>${apiHandlerScript}</script></head>`
-        );
+        // Initialize webview content with VS Code API injected
+        await this.updateWebview(webviewPanel, document);
 
         // Set up message handling from webview
         webviewPanel.webview.onDidReceiveMessage(
@@ -75,26 +85,20 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
                         case 'updateComponent':
                             if (Array.isArray(message.components)) {
-                                // Store original state before update
-                                message.components.forEach((component: VrmComponent) => {
-                                    this.updateOriginalComponent(component);
-                                });
-                                await this.updateMultipleComponentsWithEdit(document, message.components, webviewPanel);
+                                await this.saveManager.updateMultipleComponents(document, message.components, webviewPanel);
                             } else if (message.component) {
-                                // Store original state before update
-                                this.updateOriginalComponent(message.component as VrmComponent);
-                                await this.updateComponentWithEdit(document, message.component as VrmComponent, webviewPanel);
+                                await this.saveManager.updateComponent(document, message.component, webviewPanel);
                             } else {
                                 throw new Error('Invalid updateComponent message: missing component or components array');
                             }
                             break;
 
                         case 'addComponent':
-                            await this.addComponentWithEdit(document, message.component);
+                            await this.saveManager.addComponent(document, message.component, webviewPanel);
                             break;
 
                         case 'deleteComponent':
-                            await this.deleteComponentWithEdit(document, message.component);
+                            await this.saveManager.deleteComponent(document, message.component, webviewPanel);
                             break;
 
                         case 'openCodeEditor':
@@ -143,9 +147,6 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             null,
             this.context.subscriptions
         );
-
-        // Initialize webview content
-        await this.updateWebview(webviewPanel, document);
     }
 
     // =================================================================
@@ -158,15 +159,13 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel?: vscode.WebviewPanel
     ): Promise<void> {
         try {
-            console.log('Updating component with workspace edit:', component.n, 'in section:', component.section);
+            console.log('Updating component:', component.n, 'in section:', component.section);
 
-            // Track this component update
-            this.updateLastComponent(component);
-
+            // Update the XML file
             const xmlGenerator = new ComponentXmlGenerator();
             const updatedContent = xmlGenerator.updateComponentInXml(document.getText(), component);
 
-            // FIXED: Use workspace edit to properly mark document as dirty
+            // Use workspace edit to update the document
             const edit = new vscode.WorkspaceEdit();
             edit.replace(
                 document.uri,
@@ -174,32 +173,17 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 updatedContent
             );
 
+            // Apply the edit - this will mark the document as dirty
             const success = await vscode.workspace.applyEdit(edit);
             if (success) {
-                console.log('✅ Component updated successfully - document is now dirty');
+                console.log('✅ Component update applied - document is now dirty');
 
-                // Only show notification and reload webview for non-drag operations
-                const isDragOperation = this.isDragOperation(component);
-                if (!isDragOperation) {
-                    this.vscodeApiHandler.showNotification(`Component #${component.n} updated`, 'info');
-                    if (webviewPanel) {
-                        // For non-drag operations, send a targeted update message instead of full reload
-                        webviewPanel.webview.postMessage({
-                            type: 'updateComponents',
-                            components: [component]
-                        });
-                    }
-                } else {
-                    // For drag operations, just send a targeted position update
-                    if (webviewPanel) {
-                        webviewPanel.webview.postMessage({
-                            type: 'updateComponentPosition',
-                            componentId: component.n,
-                            section: component.section,
-                            x: component.x,
-                            y: component.y
-                        });
-                    }
+                if (webviewPanel) {
+                    // Send a targeted update message instead of full reload
+                    webviewPanel.webview.postMessage({
+                        type: 'updateComponents',
+                        components: [component]
+                    });
                 }
             } else {
                 throw new Error('Failed to apply workspace edit');
@@ -211,20 +195,15 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         }
     }
 
-    // New method to handle multiple component updates in a single edit
     private async updateMultipleComponentsWithEdit(
         document: vscode.TextDocument,
         components: VrmComponent[],
         webviewPanel?: vscode.WebviewPanel
     ): Promise<void> {
         try {
-            console.log(`Updating ${components.length} components with a single workspace edit`);
+            console.log(`Updating ${components.length} components`);
 
-            // Track the last component update
-            if (components.length > 0) {
-                this.updateLastComponent(components[components.length - 1]);
-            }
-
+            // Update the XML file
             const xmlGenerator = new ComponentXmlGenerator();
             let currentContent = document.getText();
 
@@ -243,38 +222,16 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
             const success = await vscode.workspace.applyEdit(edit);
             if (success) {
-                console.log(`✅ ${components.length} components updated successfully - document is now dirty`);
+                console.log(`✅ Updated ${components.length} components - document is now dirty`);
 
-                // Check if this is a drag operation
-                const isDragOperation = components.length > 0 && this.isDragOperation(components[0]);
-
-                if (!isDragOperation) {
-                    // For non-drag operations, show notification and update webview
-                    this.vscodeApiHandler.showNotification(`${components.length} components updated`, 'info');
-                    if (webviewPanel) {
-                        // Send targeted update for non-drag operations
-                        webviewPanel.webview.postMessage({
-                            type: 'updateComponents',
-                            components: components
-                        });
-                    }
-                } else {
-                    // For drag operations, send only position updates
-                    if (webviewPanel) {
-                        // Send position updates for each component
-                        components.forEach(component => {
-                            webviewPanel.webview.postMessage({
-                                type: 'updateComponentPosition',
-                                componentId: component.n,
-                                section: component.section,
-                                x: component.x,
-                                y: component.y
-                            });
-                        });
-                    }
+                if (webviewPanel) {
+                    webviewPanel.webview.postMessage({
+                        type: 'updateComponents',
+                        components: components
+                    });
                 }
             } else {
-                throw new Error('Failed to apply workspace edit for multiple components');
+                throw new Error('Failed to apply workspace edit');
             }
 
         } catch (error) {
@@ -363,20 +320,6 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         }
     }
 
-    // Helper method to detect if this is a drag operation (to avoid notification spam)
-    private isDragOperation(component: VrmComponent): boolean {
-        // Check if only position (x,y) changed and no other properties were modified
-        const originalComponent = this.getOriginalComponent(component.n);
-        if (!originalComponent) return false;
-
-        // Compare all properties except x and y
-        const { x: origX, y: origY, ...origRest } = originalComponent;
-        const { x: newX, y: newY, ...newRest } = component;
-
-        // If only x and y changed, it's a drag operation
-        return JSON.stringify(origRest) === JSON.stringify(newRest);
-    }
-
     // Add a method to track original component state
     private getOriginalComponent(componentId: number): VrmComponent | undefined {
         return this.originalComponents.get(componentId);
@@ -409,10 +352,16 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             console.log('Parsed components:', allComponents.length);
 
             if (!skipHtmlRegeneration) {
-                // Only regenerate HTML if not skipping
+                // Generate HTML with VS Code API injected
                 const htmlGenerator = new HtmlGenerator();
-                webviewPanel.webview.html = htmlGenerator.generateMainWebviewHtml(webviewPanel.webview, allComponents);
-                console.log('✅ Webview HTML regenerated');
+                let html = htmlGenerator.generateMainWebviewHtml(webviewPanel.webview, allComponents);
+
+                // Inject VS Code API as the first script in the body
+                const apiHandlerScript = VSCodeApiHandler.inject();
+                html = html.replace('<body>', `<body><script>${apiHandlerScript}</script>`);
+
+                webviewPanel.webview.html = html;
+                console.log('✅ Webview HTML regenerated with VS Code API');
             } else {
                 // Just send component updates
                 webviewPanel.webview.postMessage({
@@ -491,18 +440,15 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     // =================================================================
 
     private async updateComponent(document: vscode.TextDocument, component: VrmComponent): Promise<void> {
-        console.warn('🔄 updateComponent called - redirecting to updateComponentWithEdit');
-        await this.updateComponentWithEdit(document, component);
+        throw new Error('Legacy updateComponent method is deprecated. Use SaveManager instead.');
     }
 
     private async addComponent(document: vscode.TextDocument, component: VrmComponent): Promise<void> {
-        console.warn('🔄 addComponent called - redirecting to addComponentWithEdit');
-        await this.addComponentWithEdit(document, component);
+        throw new Error('Legacy addComponent method is deprecated. Use SaveManager instead.');
     }
 
     private async deleteComponent(document: vscode.TextDocument, component: VrmComponent): Promise<void> {
-        console.warn('🔄 deleteComponent called - redirecting to deleteComponentWithEdit');
-        await this.deleteComponentWithEdit(document, component);
+        throw new Error('Legacy deleteComponent method is deprecated. Use SaveManager instead.');
     }
 
     // Enhanced openCodeEditor method with better sync support
@@ -717,8 +663,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         content?: string,
         webviewPanel?: vscode.WebviewPanel
     ): Promise<void> {
-        if (!componentId || !content) {
-            throw new Error('Invalid component ID or content for sync');
+        if (!componentId || !content || !webviewPanel) {
+            throw new Error('Invalid component ID, content, or webviewPanel for sync');
         }
 
         try {
@@ -748,13 +694,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                     throw new Error(`Unsupported component type for code sync: ${componentType}`);
             }
 
-            // FIXED: Update the component using workspace edit (this will mark document as dirty)
-            await this.updateComponentWithEdit(document, component);
-
-            // Refresh webview to show changes
-            if (webviewPanel) {
-                await this.updateWebview(webviewPanel, document);
-            }
+            // Use SaveManager to update the component
+            await this.saveManager.updateComponent(document, component, webviewPanel);
 
         } catch (error) {
             console.error('Error syncing code back to component:', error);
@@ -795,7 +736,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             await vscode.window.showTextDocument(tempDocument, { viewColumn: vscode.ViewColumn.Beside });
 
             // Set up auto-save watcher for this temp file
-            this.setupTempFileWatcher(tempDocument, document, 'html');
+            await this.setupTempFileWatcher(tempDocument, document, 'html');
 
             this.vscodeApiHandler.showNotification('HTML editor opened. Changes will sync automatically when you save.', 'info');
 
@@ -817,7 +758,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             await vscode.window.showTextDocument(tempDocument, { viewColumn: vscode.ViewColumn.Beside });
 
             // Set up auto-save watcher for this temp file
-            this.setupTempFileWatcher(tempDocument, document, 'js');
+            await this.setupTempFileWatcher(tempDocument, document, 'js');
 
             this.vscodeApiHandler.showNotification('JavaScript editor opened. Changes will sync automatically when you save.', 'info');
 
@@ -889,32 +830,20 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         }
     }
 
-    // FIXED: Temp file watcher now uses workspace edits
-    private setupTempFileWatcher(tempDoc: vscode.TextDocument, originalDoc: vscode.TextDocument, type: 'html' | 'js'): void {
+    // FIXED: Temp file watcher now uses SaveManager
+    private async setupTempFileWatcher(tempDoc: vscode.TextDocument, originalDoc: vscode.TextDocument, type: 'html' | 'js'): Promise<void> {
         const watcher = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
             if (savedDoc.uri.fsPath === tempDoc.uri.fsPath) {
                 try {
-                    console.log(`Syncing ${type.toUpperCase()} changes from temp file to VRM using workspace edit`);
+                    console.log(`Syncing ${type.toUpperCase()} changes from temp file to VRM using SaveManager`);
 
-                    const vrmDocument = new VrmDocument(originalDoc);
-                    const updatedContent = type === 'html'
-                        ? vrmDocument.updateHtmlContent(savedDoc.getText())
-                        : vrmDocument.updateJsContent(savedDoc.getText());
-
-                    // FIXED: Use workspace edit to mark document as dirty
-                    const edit = new vscode.WorkspaceEdit();
-                    edit.replace(
-                        originalDoc.uri,
-                        new vscode.Range(0, 0, originalDoc.lineCount, 0),
-                        updatedContent
-                    );
-
-                    const success = await vscode.workspace.applyEdit(edit);
-                    if (success) {
-                        console.log(`✅ ${type.toUpperCase()} changes synced successfully - document is now dirty`);
+                    if (type === 'html') {
+                        await this.saveManager.updateHtmlContent(originalDoc, savedDoc.getText());
                     } else {
-                        throw new Error('Failed to apply edit');
+                        await this.saveManager.updateJsContent(originalDoc, savedDoc.getText());
                     }
+
+                    console.log(`✅ ${type.toUpperCase()} changes synced successfully - document is now dirty`);
 
                 } catch (error) {
                     console.error(`Error syncing ${type.toUpperCase()} changes:`, error);
@@ -1035,12 +964,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             if (e.document.uri.toString() === document.uri.toString()) {
                 // Use setTimeout to avoid blocking the UI thread
                 setTimeout(() => {
-                    // Check if this is a drag operation by looking at the last component update
-                    const lastComponent = this.getLastUpdatedComponent();
-                    const isDragOperation = lastComponent ? this.isDragOperation(lastComponent) : false;
-
-                    // Skip HTML regeneration for drag operations
-                    this.updateWebview(webviewPanel, document, isDragOperation);
+                    this.updateWebview(webviewPanel, document, false);
                 }, 100);
             }
         });
@@ -1052,5 +976,99 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
     private updateLastComponent(component: VrmComponent): void {
         this.lastUpdatedComponent = { ...component };
+    }
+
+    private async handleWebviewMessage(message: any, webviewPanel: vscode.WebviewPanel): Promise<void> {
+        switch (message.command) {
+            case 'updateComponent': {
+                const component = message.component;
+                if (!component) {
+                    console.error('No component data received in updateComponent message');
+                    return;
+                }
+
+                // Create a workspace edit to update the component
+                const edit = new vscode.WorkspaceEdit();
+                const document = vscode.window.activeTextEditor?.document;
+                if (!document) return;
+
+                // Get the current XML content
+                const xmlContent = document.getText();
+                const xmlDoc = new DOMParser().parseFromString(xmlContent, 'text/xml');
+                if (!xmlDoc) return;
+
+                // Find the component section (preproc or postproc)
+                const section = component.section === 'preproc' ? 'preproc' : 'postproc';
+                const sectionElement = xmlDoc.querySelector(section);
+                if (!sectionElement) return;
+
+                // Find the component element
+                const componentElement = Array.from(sectionElement.children).find(
+                    (el: Element) => el.getAttribute('n') === component.n.toString()
+                );
+                if (!componentElement) return;
+
+                // Update component attributes and values
+                this.updateComponentElement(componentElement, component);
+
+                // Convert back to string and create the edit
+                const serializer = new XMLSerializer();
+                const newXmlContent = serializer.serializeToString(xmlDoc);
+                const fullRange = new vscode.Range(
+                    document.positionAt(0),
+                    document.positionAt(xmlContent.length)
+                );
+
+                // Apply the edit and mark the document as dirty
+                edit.replace(document.uri, fullRange, newXmlContent);
+                await vscode.workspace.applyEdit(edit);
+
+                // Always mark the document as dirty when component values change
+                if (message.isValueChange) {
+                    // The document is already marked as dirty by the workspace edit
+                    // We just need to update the webview
+                    await this.updateWebview(webviewPanel, document, true);
+                }
+                break;
+            }
+            // ... rest of the cases ...
+        }
+    }
+
+    private updateComponentElement(element: Element, component: any): void {
+        // Update basic attributes
+        element.setAttribute('n', component.n.toString());
+        element.setAttribute('t', component.t);
+        element.setAttribute('x', component.x.toString());
+        element.setAttribute('y', component.y.toString());
+
+        // Update comment if it exists
+        const commentElement = element.querySelector('comment');
+        if (component.comment) {
+            if (commentElement) {
+                commentElement.textContent = component.comment;
+            } else {
+                const newComment = element.ownerDocument!.createElement('comment');
+                newComment.textContent = component.comment;
+                element.appendChild(newComment);
+            }
+        } else if (commentElement) {
+            element.removeChild(commentElement);
+        }
+
+        // Update values
+        if (component.values) {
+            // Remove existing value elements
+            const existingValues = element.querySelectorAll('value');
+            existingValues.forEach(v => element.removeChild(v));
+
+            // Add new value elements
+            Object.entries(component.values).forEach(([key, value]) => {
+                const valueElement = element.ownerDocument!.createElement('value');
+                valueElement.setAttribute('n', key);
+                valueElement.textContent = value as string;
+                element.appendChild(valueElement);
+            });
+        }
     }
 }

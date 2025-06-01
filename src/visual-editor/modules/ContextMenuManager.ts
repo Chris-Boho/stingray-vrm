@@ -1,4 +1,4 @@
-import { 
+import {
     Position,
     IContextMenuManager,
     IStateManager,
@@ -6,24 +6,24 @@ import {
     IRenderingManager,
     VrmComponent,
     IKeyboardManager,
-    CustomWindow 
+    CustomWindow
 } from '../../types';
 
 declare const window: CustomWindow;
 
 export class ContextMenuManager implements IContextMenuManager {
-    
+
     public showContextMenu(x: number, y: number): void {
         const stateManager: IStateManager = window.stateManager;
-        
+
         // Remove existing context menu if any
         const existingMenu = stateManager.getContextMenu();
         if (existingMenu) {
             document.body.removeChild(existingMenu);
         }
-        
+
         stateManager.setIsContextMenuOpen(true);
-        
+
         // Create main context menu
         const contextMenu = document.createElement('div');
         contextMenu.className = 'context-menu';
@@ -39,7 +39,7 @@ export class ContextMenuManager implements IContextMenuManager {
         contextMenu.style.overflow = 'visible';
         contextMenu.style.fontFamily = 'var(--vscode-font-family)';
         contextMenu.style.fontSize = 'var(--vscode-font-size)';
-        
+
         // Create main menu items
         const mainMenuItems = [
             {
@@ -277,15 +277,15 @@ export class ContextMenuManager implements IContextMenuManager {
                 ]
             }
         ];
-        
+
         // Build menu structure
         this.buildMenuItem(contextMenu, mainMenuItems);
-        
+
         document.body.appendChild(contextMenu);
-        
+
         // Store reference to menu
         stateManager.setContextMenu(contextMenu);
-        
+
         // Close menu when clicking outside
         const closeMenu = (e: Event) => {
             if (contextMenu && !this.isClickInsideAnyMenu(e.target as Node)) {
@@ -293,7 +293,7 @@ export class ContextMenuManager implements IContextMenuManager {
                 document.removeEventListener('click', closeMenu);
             }
         };
-        
+
         // Use setTimeout to avoid immediate close
         setTimeout(() => {
             document.addEventListener('click', closeMenu);
@@ -303,21 +303,21 @@ export class ContextMenuManager implements IContextMenuManager {
     private deleteSelectedComponents(): void {
         const stateManager: IStateManager = window.stateManager;
         const selectedComponents = stateManager.getSelectedComponents();
-        
+
         if (selectedComponents.size === 0) {
             this.showTemporaryMessage('No components selected to delete');
             return;
         }
-        
+
         console.log('Context menu delete triggered with', selectedComponents.size, 'components');
-        
+
         // Simple approach: directly trigger delete key event
         const deleteEvent = new KeyboardEvent('keydown', {
             key: 'Delete',
             bubbles: true,
             cancelable: true
         });
-        
+
         // Dispatch to document to ensure it gets picked up
         document.dispatchEvent(deleteEvent);
     }
@@ -332,7 +332,7 @@ export class ContextMenuManager implements IContextMenuManager {
                 parentElement.appendChild(separator);
                 return;
             }
-            
+
             const menuItem = document.createElement('div');
             menuItem.className = 'menu-item';
             menuItem.style.display = 'flex';
@@ -343,7 +343,7 @@ export class ContextMenuManager implements IContextMenuManager {
             menuItem.style.color = 'var(--vscode-menu-foreground)';
             menuItem.style.transition = 'background-color 0.2s';
             menuItem.style.position = 'relative';
-            
+
             // Check if item is disabled
             const isDisabled = item.enabled === false;
             if (isDisabled) {
@@ -351,13 +351,13 @@ export class ContextMenuManager implements IContextMenuManager {
                 menuItem.style.cursor = 'default';
                 menuItem.style.color = 'var(--vscode-descriptionForeground)';
             }
-            
+
             // Left side content (icon + text)
             const leftContent = document.createElement('div');
             leftContent.style.display = 'flex';
             leftContent.style.alignItems = 'center';
             leftContent.style.gap = '8px';
-            
+
             // Icon
             if (item.icon) {
                 const icon = document.createElement('span');
@@ -367,20 +367,20 @@ export class ContextMenuManager implements IContextMenuManager {
                 icon.style.textAlign = 'center';
                 leftContent.appendChild(icon);
             }
-            
+
             // Text
             const text = document.createElement('span');
             text.textContent = item.text;
             leftContent.appendChild(text);
-            
+
             menuItem.appendChild(leftContent);
-            
+
             // Right side content (shortcut + submenu arrow)
             const rightContent = document.createElement('div');
             rightContent.style.display = 'flex';
             rightContent.style.alignItems = 'center';
             rightContent.style.gap = '8px';
-            
+
             // Shortcut
             if (item.shortcut) {
                 const shortcut = document.createElement('span');
@@ -389,7 +389,7 @@ export class ContextMenuManager implements IContextMenuManager {
                 shortcut.style.color = 'var(--vscode-descriptionForeground)';
                 rightContent.appendChild(shortcut);
             }
-            
+
             // Submenu arrow
             if (item.hasSubmenu) {
                 const arrow = document.createElement('span');
@@ -398,9 +398,9 @@ export class ContextMenuManager implements IContextMenuManager {
                 arrow.style.color = 'var(--vscode-descriptionForeground)';
                 rightContent.appendChild(arrow);
             }
-            
+
             menuItem.appendChild(rightContent);
-            
+
             // Hover effects (only if not disabled)
             if (!isDisabled) {
                 menuItem.onmouseover = () => {
@@ -411,31 +411,31 @@ export class ContextMenuManager implements IContextMenuManager {
                             (child as HTMLElement).style.color = 'var(--vscode-menu-foreground)';
                         }
                     });
-                    
+
                     menuItem.style.backgroundColor = 'var(--vscode-menu-selectionBackground)';
                     menuItem.style.color = 'var(--vscode-menu-selectionForeground)';
                 };
-                
+
                 menuItem.onmouseout = () => {
                     menuItem.style.backgroundColor = 'transparent';
                     menuItem.style.color = 'var(--vscode-menu-foreground)';
                 };
             }
-            
+
             // Click handler (only if not disabled)
             if (!isDisabled) {
                 if (item.hasSubmenu && level === 0) {
                     // Main menu items with submenus - show submenu on click
                     menuItem.onclick = (e) => {
                         e.stopPropagation();
-                        
+
                         // Hide any existing submenus from siblings
                         Array.from(parentElement.children).forEach(child => {
                             if (child !== menuItem && child.classList.contains('menu-item')) {
                                 this.hideSubmenus(child as HTMLElement);
                             }
                         });
-                        
+
                         // Toggle submenu for this item
                         const existingSubmenu = menuItem.querySelector('.submenu');
                         if (existingSubmenu) {
@@ -453,13 +453,13 @@ export class ContextMenuManager implements IContextMenuManager {
                                 this.hideSubmenus(child as HTMLElement);
                             }
                         });
-                        
+
                         // Show submenu for this item
                         const existingSubmenu = menuItem.querySelector('.submenu');
                         if (!existingSubmenu) {
                             this.showSubmenu(menuItem, item.submenuItems, level);
                         }
-                        
+
                         // Apply hover style
                         menuItem.style.backgroundColor = 'var(--vscode-menu-selectionBackground)';
                         menuItem.style.color = 'var(--vscode-menu-selectionForeground)';
@@ -472,15 +472,15 @@ export class ContextMenuManager implements IContextMenuManager {
                     };
                 }
             }
-            
+
             parentElement.appendChild(menuItem);
         });
     }
-    
+
     private showSubmenu(parentItem: HTMLElement, submenuItems: any[], level: number): void {
         // Remove existing submenu if any
         this.hideSubmenus(parentItem);
-        
+
         const submenu = document.createElement('div');
         submenu.className = 'submenu';
         submenu.style.position = 'absolute';
@@ -493,28 +493,28 @@ export class ContextMenuManager implements IContextMenuManager {
         submenu.style.overflow = 'visible';
         submenu.style.fontFamily = 'var(--vscode-font-family)';
         submenu.style.fontSize = 'var(--vscode-font-size)';
-        
+
         // Position submenu to the right of parent item
         const parentRect = parentItem.getBoundingClientRect();
         submenu.style.left = (parentRect.width - 2) + 'px';
         submenu.style.top = '0px';
-        
+
         // Build submenu items
         this.buildMenuItem(submenu, submenuItems, level + 1);
-        
+
         parentItem.appendChild(submenu);
-        
+
         // Adjust position if submenu goes off screen
         setTimeout(() => {
             const submenuRect = submenu.getBoundingClientRect();
             const windowWidth = window.innerWidth;
             const windowHeight = window.innerHeight;
-            
+
             // Check if submenu goes off right edge
             if (submenuRect.right > windowWidth) {
                 submenu.style.left = (-submenuRect.width + 2) + 'px';
             }
-            
+
             // Check if submenu goes off bottom edge
             if (submenuRect.bottom > windowHeight) {
                 const adjustment = Math.min(submenuRect.bottom - windowHeight + 10, submenuRect.height - 50);
@@ -522,14 +522,14 @@ export class ContextMenuManager implements IContextMenuManager {
             }
         }, 10);
     }
-    
+
     private hideSubmenus(parentItem: HTMLElement): void {
         const existingSubmenu = parentItem.querySelector('.submenu');
         if (existingSubmenu) {
             parentItem.removeChild(existingSubmenu);
         }
     }
-    
+
     private isClickInsideAnyMenu(target: Node): boolean {
         let element = target as HTMLElement;
         while (element) {
@@ -540,23 +540,23 @@ export class ContextMenuManager implements IContextMenuManager {
         }
         return false;
     }
-    
+
     private insertComponent(componentType: string, componentName: string): void {
         console.log(`Insert ${componentType} component: ${componentName}`);
         this.closeContextMenu();
-        
+
         const stateManager: IStateManager = window.stateManager;
-        
+
         try {
             // Get context menu position for component placement
             const contextPos = stateManager.getContextMenuPosition();
-            
+
             // Snap to grid
             const snapped = stateManager.snapToGrid(contextPos.x, contextPos.y);
-            
+
             // Get current section and existing components
             const currentSection = stateManager.getActiveTab() as 'preproc' | 'postproc';
-            const existingComponents = currentSection === 'preproc' ? 
+            const existingComponents = currentSection === 'preproc' ?
                 stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
 
             // Access ComponentTemplates from window (it should be available in the context)
@@ -567,10 +567,10 @@ export class ContextMenuManager implements IContextMenuManager {
 
             // Create new component using template
             const newComponent = ComponentTemplates.createComponent(
-                componentType, 
-                currentSection, 
-                existingComponents, 
-                snapped.x, 
+                componentType,
+                currentSection,
+                existingComponents,
+                snapped.x,
                 snapped.y
             );
 
@@ -589,9 +589,9 @@ export class ContextMenuManager implements IContextMenuManager {
             // Re-render the current section
             const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = currentSection + 'Canvas';
-            const components = currentSection === 'preproc' ? 
+            const components = currentSection === 'preproc' ?
                 stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-            
+
             renderingManager.renderComponentSection(components, canvasId);
 
             // Send to extension to update VRM file
@@ -632,12 +632,12 @@ export class ContextMenuManager implements IContextMenuManager {
     public closeContextMenu(): void {
         const stateManager: IStateManager = window.stateManager;
         const contextMenu = stateManager.getContextMenu();
-        
+
         if (contextMenu && contextMenu.parentNode) {
             document.body.removeChild(contextMenu);
         }
         stateManager.setContextMenu(null);
-        
+
         // Reset flag when menu is closed, with a small delay to prevent immediate selection clearing
         setTimeout(() => {
             stateManager.setIsContextMenuOpen(false);
@@ -646,21 +646,21 @@ export class ContextMenuManager implements IContextMenuManager {
 
     public handleRightClick(e: MouseEvent): boolean {
         e.preventDefault();
-        
+
         const canvas = e.target as HTMLElement;
         const rect = canvas.getBoundingClientRect();
         const stateManager: IStateManager = window.stateManager;
-        
+
         // Store the click position for the context menu
         const contextMenuPosition: Position = {
             x: e.clientX - rect.left,
             y: e.clientY - rect.top
         };
         stateManager.setContextMenuPosition(contextMenuPosition);
-        
+
         // Show the context menu at the click position
         this.showContextMenu(e.clientX, e.clientY);
-        
+
         // Prevent the default context menu
         return false;
     }
@@ -683,9 +683,9 @@ export class ContextMenuManager implements IContextMenuManager {
         messageElement.style.fontFamily = 'var(--vscode-font-family)';
         messageElement.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
         messageElement.style.transition = 'opacity 0.3s ease';
-        
+
         document.body.appendChild(messageElement);
-        
+
         // Remove after 2 seconds
         setTimeout(() => {
             messageElement.style.opacity = '0';
@@ -696,7 +696,7 @@ export class ContextMenuManager implements IContextMenuManager {
             }, 300);
         }, 2000);
     }
-    
+
     public static inject(): string {
         return `
             window.contextMenuManager = new (${ContextMenuManager.toString()})();

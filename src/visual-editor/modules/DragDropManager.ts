@@ -123,27 +123,33 @@ export class DragDropManager implements IDragDropManager {
             groupElement.setAttribute('data-y', newY.toString());
         }
 
-        // Only update connections if needed (without full re-render)
-        if (dragComponent.j.length > 0) {
-            const components = dragComponent.section === 'preproc' ?
-                stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+        // Update all connections for this component
+        const components = dragComponent.section === 'preproc' ?
+            stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+        const renderingManager: IRenderingManager = window.renderingManager;
 
-            // Update only the connections for this component
+        // Update outgoing connections (where this component is the source)
+        if (dragComponent.j && dragComponent.j.length > 0) {
             dragComponent.j.forEach((targetId: number, index: number) => {
                 if (targetId > 0) {
                     const targetComponent = components.find(c => c.n === targetId);
                     if (targetComponent) {
-                        const connectionLine = document.querySelector(
-                            `[data-connection="${dragComponent.n}-${targetId}"][data-section="${dragComponent.section}"]`
-                        );
-                        if (connectionLine) {
-                            const renderingManager: IRenderingManager = window.renderingManager;
-                            renderingManager.renderConnection(dragComponent, targetComponent, index === 0, dragComponent.section + 'Canvas');
-                        }
+                        renderingManager.renderConnection(dragComponent, targetComponent, index === 0, dragComponent.section + 'Canvas');
                     }
                 }
             });
         }
+
+        // Update incoming connections (where this component is the target)
+        components.forEach(component => {
+            if (component.j && component.j.length > 0) {
+                component.j.forEach((targetId: number, index: number) => {
+                    if (targetId === dragComponent.n) {
+                        renderingManager.renderConnection(component, dragComponent, index === 0, dragComponent.section + 'Canvas');
+                    }
+                });
+            }
+        });
     }
 
     private endDrag(e: MouseEvent, dragComponent: VrmComponent, groupElement: Element, handleDragBound: any, endDragBound: any): void {
@@ -323,6 +329,9 @@ export class DragDropManager implements IDragDropManager {
         const deltaX = newX - firstStartPos.x;
         const deltaY = newY - firstStartPos.y;
 
+        // Get rendering manager once
+        const renderingManager: IRenderingManager = window.renderingManager;
+
         // Apply movement to all selected components
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
             const [compSection, compId] = componentKey.split('-');
@@ -344,14 +353,43 @@ export class DragDropManager implements IDragDropManager {
                 // Update component position in the data
                 component.x = componentNewX;
                 component.y = componentNewY;
+
+                // Update the visual position immediately without re-rendering
+                const groupElement = document.querySelector(`[data-component-id="${compId}"][data-section="${compSection}"]`) as HTMLElement;
+                if (groupElement) {
+                    // During drag, update position directly without any transitions
+                    groupElement.style.transform = `translate(${componentNewX}px, ${componentNewY}px)`;
+                    groupElement.setAttribute('data-x', componentNewX.toString());
+                    groupElement.setAttribute('data-y', componentNewY.toString());
+                }
+
+                // Update all connections for this component
+                // Update outgoing connections (where this component is the source)
+                if (component.j && component.j.length > 0) {
+                    component.j.forEach((targetId: number, index: number) => {
+                        if (targetId > 0) {
+                            const targetComponent = components.find(c => c.n === targetId);
+                            if (targetComponent) {
+                                renderingManager.renderConnection(component, targetComponent, index === 0, component.section + 'Canvas');
+                            }
+                        }
+                    });
+                }
+
+                // Update incoming connections (where this component is the target)
+                components.forEach(otherComponent => {
+                    if (otherComponent.j && otherComponent.j.length > 0) {
+                        otherComponent.j.forEach((targetId: number, index: number) => {
+                            if (targetId === component.n) {
+                                renderingManager.renderConnection(otherComponent, component, index === 0, component.section + 'Canvas');
+                            }
+                        });
+                    }
+                });
             }
         });
 
-        // Re-render the section to update visuals
-        const renderingManager: IRenderingManager = window.renderingManager;
-        renderingManager.renderComponentSection(components, section + 'Canvas');
-
-        // Restore selection states
+        // Restore selection states without re-rendering
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
             const [compSection, compId] = componentKey.split('-');
             const element = document.querySelector(`[data-component-id="${compId}"][data-section="${compSection}"]`);

@@ -1,5 +1,6 @@
 // types.ts - Centralized type definitions
 import { VSCodeApiHandler } from './VSCodeApiHandler';
+import { DocumentState } from './visual-editor/modules/DocumentState';
 
 // VS Code API interface
 export interface VsCodeApi {
@@ -161,26 +162,36 @@ export interface IStateManager {
     // Utility methods
     snapToGrid(x: number, y: number): Position;
     getComponentColor(type: string): string;
-    switchTab(tabName: string): void;
     updateComponentCounts(): void;
     zoomIn(): void;
     zoomOut(): void;
     resetZoom(): void;
+    switchTab(tabName: string): void;
+
+    // New method for component updates
+    updateComponent(component: VrmComponent): void;
 }
 
 // Selection Manager interface
 export interface ISelectionManager {
+    startSelection(e: MouseEvent): void;
+    updateSelection(e: MouseEvent): void;
+    endSelection(e: MouseEvent): void;
+    clearSelection(): void;
+    selectAllComponents(): void;
+    restoreSelectionStates(): void;
+    getSelectedComponentCount(): number;
+    isComponentSelected(componentKey: string): boolean;
+    selectComponent(componentKey: string): void;
+    deselectComponent(componentKey: string): void;
+    isSelecting(): boolean;
+    isDragging(): boolean;
+    isMultiDragging(): boolean;
     selectComponentsBelow(point: Position): void;
     selectComponentsAbove(point: Position): void;
     selectComponentsInRow(point: Position): void;
     selectComponentsInColumn(point: Position): void;
-    selectAllComponents(): void;
     updateSelectionDetails(): void;
-    clearSelection(): void;
-    restoreSelectionStates(): void;
-    startSelection(e: MouseEvent): void;
-    updateSelection(e: MouseEvent): void;
-    endSelection(e: MouseEvent): void;
 }
 
 // Rendering Manager interface
@@ -189,7 +200,7 @@ export interface IRenderingManager {
     renderComponentSection(components: VrmComponent[], canvasId: string): void;
     renderComponent(component: VrmComponent, canvasId: string): void;
     renderConnection(fromComponent: VrmComponent, toComponent: VrmComponent, isPrimary: boolean, canvasId: string): void;
-    addCanvasEventHandlers(canvas: Element): void;
+    addCanvasEventHandlers(canvas: HTMLElement): void;
 }
 
 // Drag Drop Manager interface
@@ -247,6 +258,7 @@ export interface CustomWindow extends Window {
     contextMenuManager: IContextMenuManager;
     connectionManager: IConnectionManager;
     keyboardManager: IKeyboardManager;
+    documentState: DocumentState;
     vscode?: VsCodeApi;
     acquireVsCodeApi?: () => VsCodeApi;
     vsCodeApiHandler?: VSCodeApiHandler;

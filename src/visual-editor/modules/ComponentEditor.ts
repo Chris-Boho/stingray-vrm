@@ -13,12 +13,39 @@ import { VSCodeApiHandler } from '../../VSCodeApiHandler';
 declare const window: CustomWindow;
 
 export class ComponentEditor implements IComponentEditor {
+    private static instance: ComponentEditor | null = null;
     private monacoEditors: Map<string, any> = new Map();
     private monacoLoaded: boolean = false;
     private loadingPromise: Promise<void> | null = null;
 
-    constructor() {
+    private constructor() {
+        if (!window.documentState) {
+            throw new Error('DocumentState must be initialized before ComponentEditor');
+        }
         this.initializeMonaco();
+        this.setupEventListeners();
+    }
+
+    public static getInstance(): ComponentEditor {
+        if (!ComponentEditor.instance) {
+            ComponentEditor.instance = new ComponentEditor();
+        }
+        return ComponentEditor.instance;
+    }
+
+    private setupEventListeners(): void {
+        // Listen for component changes to update UI
+        window.documentState.onDidChangeState(change => {
+            if (change.type === 'component') {
+                const renderingManager: IRenderingManager = window.renderingManager;
+                if (renderingManager) {
+                    // Re-render the affected section
+                    const section = change.component?.section || 'preproc';
+                    const components = window.documentState.getComponents(section);
+                    renderingManager.renderComponentSection(components, `${section}Canvas`);
+                }
+            }
+        });
     }
 
     // FIXED: Improved Monaco loading with better error handling
@@ -486,6 +513,9 @@ export class ComponentEditor implements IComponentEditor {
 
     // FIXED: Enhanced modal initialization
     async showComponentEditor(component: VrmComponent): Promise<void> {
+        console.log('showComponentEditor called for component:', component.n, component.t);
+        console.log('window.vscode available:', !!window.vscode);
+
         // Ensure Monaco is loaded
         await this.initializeMonaco();
 
@@ -496,6 +526,7 @@ export class ComponentEditor implements IComponentEditor {
 
         document.body.appendChild(modal);
         window.currentEditingComponent = component;
+        console.log('Set currentEditingComponent:', component.n);
 
         // FIXED: Initialize editors with proper timing
         setTimeout(async () => {
@@ -555,63 +586,53 @@ export class ComponentEditor implements IComponentEditor {
         window.currentEditingComponent = null;
     }
 
-    // Enhanced save method to get values from Monaco editors
+    // Enhanced save method to update DocumentState
     saveComponentChanges(componentId: number): void {
+        console.log('saveComponentChanges called with componentId:', componentId);
+        console.log('window.vscode available:', !!window.vscode);
+
         const component = window.currentEditingComponent;
-        if (!component) return;
+        if (!component) {
+            console.log('No current editing component found');
+            return;
+        }
+        console.log('Current editing component:', component.n, component.t);
+
+        // Get the latest version of the component from DocumentState
+        const latestComponent = window.documentState.getComponent(component.section, component.n);
+        if (!latestComponent) {
+            console.error('Component not found in DocumentState');
+            return;
+        }
+        console.log('Found component in DocumentState');
+
+        // Create a deep copy of the component to ensure all changes are captured
+        const updatedComponent = JSON.parse(JSON.stringify(latestComponent));
 
         // Update common fields
-        this.updateCommonFields(component);
+        this.updateCommonFields(updatedComponent);
 
         // Update component-specific fields with Monaco content
-        this.updateComponentSpecificFieldsWithMonaco(component);
+        this.updateComponentSpecificFieldsWithMonaco(updatedComponent);
 
-        // Send update to extension
-        const apiHandler = window.vsCodeApiHandler;
-        if (apiHandler) {
-            apiHandler.updateComponent(component);
+        // Update the component in DocumentState
+        window.documentState.updateComponent(updatedComponent);
+        console.log('Updated component in DocumentState');
+
+        // Send message to VS Code to update the document
+        if (window.vscode && window.vscode.postMessage) {
+            console.log('Sending message to VS Code to update the document');
+            window.vscode.postMessage({
+                command: 'updateComponent',
+                component: updatedComponent,
+                isValueChange: true
+            });
         } else {
-            console.warn('VS Code API Handler not available, cannot save component changes');
-        }
-
-        // Get state manager to access components
-        const stateManager: IStateManager = window.stateManager;
-        const renderingManager: IRenderingManager = window.renderingManager;
-
-        // Get all components in the same section
-        const sectionComponents = component.section === 'preproc' ?
-            stateManager.getPreprocComponents() :
-            stateManager.getPostprocComponents();
-
-        // Find components that need to be re-rendered:
-        // 1. The updated component
-        // 2. Any components that connect to this component
-        // 3. Any components this component connects to
-        const componentsToUpdate = new Set<VrmComponent>();
-        componentsToUpdate.add(component);
-
-        // Find components that connect to this component
-        sectionComponents.forEach(c => {
-            if (c.j && (c.j[0] === component.n || c.j[1] === component.n)) {
-                componentsToUpdate.add(c);
-            }
-        });
-
-        // Find components this component connects to
-        if (component.j) {
-            component.j.forEach(targetId => {
-                if (targetId > 0) {
-                    const targetComponent = sectionComponents.find(c => c.n === targetId);
-                    if (targetComponent) {
-                        componentsToUpdate.add(targetComponent);
-                    }
-                }
+            console.warn('window.vscode or postMessage not available:', {
+                vscode: !!window.vscode,
+                postMessage: window.vscode ? !!window.vscode.postMessage : false
             });
         }
-
-        // Re-render the section with updated components
-        const canvasId = component.section + 'Canvas';
-        renderingManager.renderComponentSection(sectionComponents, canvasId);
 
         // Restore any selection states
         const selectionManager: ISelectionManager = window.selectionManager;
@@ -622,9 +643,13 @@ export class ComponentEditor implements IComponentEditor {
 
     // Enhanced field update with Monaco support
     private updateComponentSpecificFieldsWithMonaco(component: VrmComponent): void {
+        // Ensure values object exists
         if (!component.values) {
             component.values = {};
         }
+
+        // Create a copy of existing values to preserve any we don't update
+        const existingValues = { ...component.values };
 
         switch (component.t) {
             case 'INSERTUPDATEQUERY':
@@ -638,6 +663,19 @@ export class ComponentEditor implements IComponentEditor {
                 this.updateComponentSpecificFields(component);
                 break;
         }
+
+        // Merge updated values with existing values
+        component.values = {
+            ...existingValues,
+            ...component.values
+        };
+
+        // Log the update for debugging
+        console.log('Updated component values:', {
+            id: component.n,
+            type: component.t,
+            values: component.values
+        });
     }
 
     private updateQueryFieldsWithMonaco(component: VrmComponent): void {
@@ -653,7 +691,7 @@ export class ComponentEditor implements IComponentEditor {
 
         // Update parameters (existing logic)
         const paramInputs = document.querySelectorAll('#parametersContainer .parameter-row');
-        component.values!.params = Array.from(paramInputs).map(row => {
+        const params = Array.from(paramInputs).map(row => {
             const nameInput = row.querySelector('[data-param-field="name"]') as HTMLInputElement;
             const typeSelect = row.querySelector('[data-param-field="type"]') as HTMLSelectElement;
             const valueInput = row.querySelector('[data-param-field="value"]') as HTMLInputElement;
@@ -664,6 +702,11 @@ export class ComponentEditor implements IComponentEditor {
                 value: valueInput?.value || ''
             };
         });
+
+        // Only update params if we found any
+        if (params.length > 0) {
+            component.values!.params = params;
+        }
     }
 
     private updateScriptFieldsWithMonaco(component: VrmComponent): void {
@@ -716,36 +759,39 @@ export class ComponentEditor implements IComponentEditor {
 
         if (!detailsPanel || !detailsContent) return;
 
+        // Get the latest component state
+        const latestComponent = window.documentState.getComponent(component.section, component.n) || component;
+
         let html = `
             <div class="detail-row">
                 <span class="detail-label">Section:</span>
-                <span class="detail-value">${component.section.toUpperCase()}</span>
+                <span class="detail-value">${latestComponent.section.toUpperCase()}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">ID:</span>
-                <span class="detail-value">${component.n}</span>
+                <span class="detail-value">${latestComponent.n}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">Type:</span>
-                <span class="detail-value">${component.t}</span>
+                <span class="detail-value">${latestComponent.t}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">Position:</span>
-                <span class="detail-value">(${component.x}, ${component.y})</span>
+                <span class="detail-value">(${latestComponent.x}, ${latestComponent.y})</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">Comment:</span>
-                <span class="detail-value">${component.c || 'None'}</span>
+                <span class="detail-value">${latestComponent.c || 'None'}</span>
             </div>
             <div class="detail-row">
                 <span class="detail-label">Watchpoint:</span>
-                <span class="detail-value">${this.getWatchpointDisplay(component.wp)}</span>
+                <span class="detail-value">${this.getWatchpointDisplay(latestComponent.wp)}</span>
             </div>
         `;
 
         // Enhanced connection display
-        const primaryConnection = component.j && component.j[0] ? component.j[0] : 'None';
-        const secondaryConnection = component.j && component.j[1] ? component.j[1] : 'None';
+        const primaryConnection = latestComponent.j && latestComponent.j[0] ? latestComponent.j[0] : 'None';
+        const secondaryConnection = latestComponent.j && latestComponent.j[1] ? latestComponent.j[1] : 'None';
 
         html += `
             <div class="detail-row">
@@ -759,7 +805,7 @@ export class ComponentEditor implements IComponentEditor {
         `;
 
         // Add component-specific details
-        html += this.generateComponentSpecificDetails(component);
+        html += this.generateComponentSpecificDetails(latestComponent);
 
         html += `
             <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--vscode-panel-border);">
@@ -783,15 +829,16 @@ export class ComponentEditor implements IComponentEditor {
 
         if (!detailsPanel || !detailsContent) return;
 
-        const stateManager: IStateManager = window.stateManager;
-        const count = stateManager.getSelectedComponents().size;
+        const selectionManager: ISelectionManager = window.selectionManager;
+        const count = selectionManager.getSelectedComponentCount();
+
         let html = `
             <div class="multi-select-info">
                 <strong>${count} components selected</strong>
             </div>
             <div class="detail-row">
                 <span class="detail-label">Section:</span>
-                <span class="detail-value">${stateManager.getActiveTab().toUpperCase()}</span>
+                <span class="detail-value">${window.documentState.getCurrentSection().toUpperCase()}</span>
             </div>
         `;
 
@@ -1674,11 +1721,11 @@ export class ComponentEditor implements IComponentEditor {
     // STATIC INJECTION METHOD
     // =================================================================
 
-    static inject(): string {
+    public static inject(): string {
         return `
             window.componentEditor = new (${ComponentEditor.toString()})();
             
-            // Make functions globally available
+            // Make functions globally available for HTML onclick handlers
             window.closeComponentEditor = () => window.componentEditor.closeComponentEditor();
             window.addParameter = () => window.componentEditor.addParameter();
             window.removeParameter = (index) => window.componentEditor.removeParameter(index);

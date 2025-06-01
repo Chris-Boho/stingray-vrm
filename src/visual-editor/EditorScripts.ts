@@ -8,12 +8,16 @@ import { KeyboardManager } from './modules/KeyboardManager';
 import { ConnectionManager } from './modules/ConnectionManager';
 import { ComponentPalette } from './modules/ComponentPalette';
 import { ComponentTemplates } from '../ComponentTemplate';
+import { DocumentState } from './modules/DocumentState';
 
 export function getEditorScripts(): string {
     return `
         // =================================================================
         // VRM Editor JavaScript - Modular Architecture
         // =================================================================
+        
+        // Inject DocumentState first since other modules depend on it
+        ${DocumentState.inject()}
         
         ${StateManager.inject()}
         

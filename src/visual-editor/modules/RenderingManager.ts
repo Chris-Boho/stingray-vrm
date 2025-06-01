@@ -2,32 +2,50 @@
 import {
     VrmComponent,
     IRenderingManager,
-    IStateManager,
     ISelectionManager,
     IDragDropManager,
     IComponentEditor,
     IContextMenuManager,
     IConnectionManager,
-    CustomWindow
+    CustomWindow,
+    Position,
+    IStateManager
 } from '../../types';
 
 declare const window: CustomWindow;
 
+type ComponentSection = 'preproc' | 'postproc';
+
 export class RenderingManager implements IRenderingManager {
+    private static instance: RenderingManager;
+    private selectionManager: ISelectionManager;
+
+    private constructor() {
+        if (!window.documentState) {
+            throw new Error('DocumentState must be initialized before RenderingManager');
+        }
+        this.selectionManager = window.selectionManager;
+    }
+
+    public static getInstance(): RenderingManager {
+        if (!RenderingManager.instance) {
+            RenderingManager.instance = new RenderingManager();
+        }
+        return RenderingManager.instance;
+    }
 
     public renderComponents(components: VrmComponent[]): void {
         console.log('Rendering components:', components.length);
-
-        const stateManager: IStateManager = window.stateManager;
 
         // Separate components by section
         const preprocComponents = components.filter(c => c.section === 'preproc');
         const postprocComponents = components.filter(c => c.section === 'postproc');
 
-        stateManager.setPreprocComponents(preprocComponents);
-        stateManager.setPostprocComponents(postprocComponents);
+        // Update DocumentState
+        window.documentState.loadState(components, '', ''); // HTML and JS content will be updated separately
 
-        stateManager.updateComponentCounts();
+        // Update component counts in UI
+        this.updateComponentCounts();
 
         // Render each section
         this.renderComponentSection(preprocComponents, 'preprocCanvas');
@@ -42,46 +60,77 @@ export class RenderingManager implements IRenderingManager {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
 
+        // Get the latest components from DocumentState
+        const section = canvasId.replace('Canvas', '') as 'preproc' | 'postproc';
+        const latestComponents = window.documentState.getComponents(section);
+
+        // Clear the canvas
         canvas.innerHTML = '';
 
         // Add arrow marker definition
         const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
         defs.innerHTML = `
-<marker id="arrowhead-${canvasId}" markerWidth="10" markerHeight="7" 
-    refX="9" refY="3.5" orient="auto">
-<polygon points="0 0, 10 3.5, 0 7" fill="#4FC3F7" />
-</marker>
-<marker id="arrowhead-secondary-${canvasId}" markerWidth="10" markerHeight="7" 
-    refX="9" refY="3.5" orient="auto">
-<polygon points="0 0, 10 3.5, 0 7" fill="#666" />
-</marker>
-`;
+            <marker id="arrowhead-${canvasId}" markerWidth="10" markerHeight="7" 
+                refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#4FC3F7" />
+            </marker>
+            <marker id="arrowhead-secondary-${canvasId}" markerWidth="10" markerHeight="7" 
+                refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#666" />
+            </marker>
+        `;
         canvas.appendChild(defs);
 
+        // Log the components we're about to render
+        console.log(`Rendering ${section} section with ${latestComponents.length} components:`,
+            latestComponents.map(c => ({ id: c.n, type: c.t, values: c.values })));
+
         // Render connections first (so they appear behind nodes)
-        components.forEach(component => {
-            component.j.forEach((targetId: number, index: number) => {
-                if (targetId > 0) {
-                    const targetComponent = components.find(c => c.n === targetId);
-                    if (targetComponent) {
-                        this.renderConnection(component, targetComponent, index === 0, canvasId);
+        latestComponents.forEach(component => {
+            if (component.j) {
+                component.j.forEach((targetId: number, index: number) => {
+                    if (targetId > 0) {
+                        const targetComponent = latestComponents.find(c => c.n === targetId);
+                        if (targetComponent) {
+                            this.renderConnection(component, targetComponent, index === 0, canvasId);
+                        }
                     }
-                }
-            });
+                });
+            }
         });
 
         // Render components
-        components.forEach(component => {
+        latestComponents.forEach(component => {
             this.renderComponent(component, canvasId);
         });
 
         // Add canvas event handlers for selection
         this.addCanvasEventHandlers(canvas);
+
+        // Log completion
+        console.log(`Finished rendering ${section} section`);
+    }
+
+    private updateComponentCounts(): void {
+        const preprocCount = document.getElementById('preprocCount');
+        const postprocCount = document.getElementById('postprocCount');
+
+        if (preprocCount) {
+            preprocCount.textContent = window.documentState.getComponents('preproc').length.toString();
+        }
+        if (postprocCount) {
+            postprocCount.textContent = window.documentState.getComponents('postproc').length.toString();
+        }
     }
 
     public renderComponent(component: VrmComponent, canvasId: string): void {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
+
+        // Get the latest component from DocumentState to ensure we have the most up-to-date data
+        const section = component.section as ComponentSection;
+        const latestComponent = window.documentState.getComponent(section, component.n);
+        if (!latestComponent) return;
 
         const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         group.classList.add('component-node');
@@ -92,8 +141,8 @@ export class RenderingManager implements IRenderingManager {
         group.setAttribute('data-x', component.x.toString());
         group.setAttribute('data-y', component.y.toString());
 
-        const stateManager: IStateManager = window.stateManager;
-        const color = stateManager.getComponentColor(component.t);
+        // Get component color from DocumentState
+        const color = window.documentState.getComponentColor(component.t);
         const iconSize = 30;
         const textOffset = iconSize + 10;
 
@@ -153,27 +202,26 @@ export class RenderingManager implements IRenderingManager {
                 // Handle selection logic
                 if (e.ctrlKey || e.metaKey) {
                     // Toggle selection with Ctrl/Cmd
-                    if (stateManager.getSelectedComponents().has(componentKey)) {
-                        stateManager.getSelectedComponents().delete(componentKey);
+                    if (this.selectionManager.isComponentSelected(componentKey)) {
+                        this.selectionManager.deselectComponent(componentKey);
                         group.classList.remove('selected');
                         console.log('Deselected:', componentKey);
                     } else {
-                        stateManager.getSelectedComponents().add(componentKey);
+                        this.selectionManager.selectComponent(componentKey);
                         group.classList.add('selected');
                         console.log('Selected:', componentKey);
                     }
-                } else if (!stateManager.getSelectedComponents().has(componentKey)) {
+                } else if (!this.selectionManager.isComponentSelected(componentKey)) {
                     // Single select if not already selected
-                    const selectionManager: ISelectionManager = window.selectionManager;
-                    selectionManager.clearSelection();
-                    stateManager.getSelectedComponents().add(componentKey);
+                    this.selectionManager.clearSelection();
+                    this.selectionManager.selectComponent(componentKey);
                     group.classList.add('selected');
                     console.log('Single selected:', componentKey);
                 }
 
                 // Start drag operation
                 const dragDropManager: IDragDropManager = window.dragDropManager;
-                if (stateManager.getSelectedComponents().size > 1) {
+                if (this.selectionManager.getSelectedComponentCount() > 1) {
                     dragDropManager.startMultiDrag(e, component);
                 } else {
                     dragDropManager.startDrag(e, component, group);
@@ -198,20 +246,20 @@ export class RenderingManager implements IRenderingManager {
 
         // Add click handler for single selection
         group.addEventListener('click', (e: MouseEvent) => {
-            if (!stateManager.getIsDragging() && !stateManager.getIsMultiDragging()) {
+            if (!this.selectionManager.isDragging() && !this.selectionManager.isMultiDragging()) {
                 e.stopPropagation();
 
                 const componentEditor: IComponentEditor = window.componentEditor;
-                if (stateManager.getSelectedComponents().size === 1) {
+                if (this.selectionManager.getSelectedComponentCount() === 1) {
                     componentEditor.showComponentDetails(component);
-                } else if (stateManager.getSelectedComponents().size > 1) {
+                } else if (this.selectionManager.getSelectedComponentCount() > 1) {
                     componentEditor.showMultiSelectionDetails();
                 }
             }
         });
 
         group.addEventListener('dblclick', (e: MouseEvent) => {
-            if (!stateManager.getIsDragging() && !stateManager.getIsMultiDragging()) {
+            if (!this.selectionManager.isDragging() && !this.selectionManager.isMultiDragging()) {
                 e.stopPropagation();
                 const componentEditor: IComponentEditor = window.componentEditor;
                 componentEditor.showComponentEditor(component);
@@ -221,13 +269,20 @@ export class RenderingManager implements IRenderingManager {
         canvas.appendChild(group);
     }
 
-    public renderConnection(fromComponent: VrmComponent, toComponent: VrmComponent, isPrimary: boolean, canvasId: string): void {
+    public renderConnection(source: VrmComponent, target: VrmComponent, isPrimary: boolean, canvasId: string): void {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
 
+        // Get the latest components from DocumentState to ensure we have the most up-to-date data
+        const sourceSection = source.section as ComponentSection;
+        const targetSection = target.section as ComponentSection;
+        const latestSource = window.documentState.getComponent(sourceSection, source.n);
+        const latestTarget = window.documentState.getComponent(targetSection, target.n);
+        if (!latestSource || !latestTarget) return;
+
         // Try to find existing connection line
         const existingLine = document.querySelector(
-            `[data-connection="${fromComponent.n}-${toComponent.n}"][data-section="${fromComponent.section}"]`
+            `[data-connection="${source.n}-${target.n}"][data-section="${source.section}"]`
         ) as SVGPathElement;
 
         let line: SVGPathElement;
@@ -237,8 +292,8 @@ export class RenderingManager implements IRenderingManager {
         } else {
             // Create new line
             line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            line.setAttribute('data-connection', `${fromComponent.n}-${toComponent.n}`);
-            line.setAttribute('data-section', fromComponent.section);
+            line.setAttribute('data-connection', `${source.n}-${target.n}`);
+            line.setAttribute('data-section', source.section);
             line.classList.add('connection-line');
             line.classList.add(isPrimary ? 'primary-connection' : 'secondary-connection');
             line.setAttribute('marker-end',
@@ -251,27 +306,27 @@ export class RenderingManager implements IRenderingManager {
         const verticalBuffer = 15; // Distance for clean vertical entry/exit
 
         // Check for handlebar case (same X axis and close vertically)
-        const sameXAxis = fromComponent.x === toComponent.x;
-        const verticalDistance = Math.abs(fromComponent.y - toComponent.y);
+        const sameXAxis = source.x === target.x;
+        const verticalDistance = Math.abs(source.y - target.y);
         const useHandlebars = sameXAxis && verticalDistance <= 30;
 
         let pathData: string;
 
         if (useHandlebars) {
             // Handlebar routing for vertically aligned close components
-            const startX = fromComponent.x;
-            const startY = fromComponent.y + iconSize / 2;
-            const endX = toComponent.x;
-            const endY = toComponent.y + iconSize / 2;
-            const leftOffset = fromComponent.x - handleOffset;
+            const startX = source.x;
+            const startY = source.y + iconSize / 2;
+            const endX = target.x;
+            const endY = target.y + iconSize / 2;
+            const leftOffset = source.x - handleOffset;
 
             pathData = `M ${startX} ${startY} L ${leftOffset} ${startY} L ${leftOffset} ${endY} L ${endX} ${endY}`;
         } else {
             // Start and end points (always bottom center to top center)
-            const startX = fromComponent.x + iconSize / 2;
-            const startY = fromComponent.y + iconSize;
-            const endX = toComponent.x + iconSize / 2;
-            const endY = toComponent.y;
+            const startX = source.x + iconSize / 2;
+            const startY = source.y + iconSize;
+            const endX = target.x + iconSize / 2;
+            const endY = target.y;
 
             // Calculate waypoints for clean orthogonal routing
             const exitY = startY + verticalBuffer;     // Exit point (down from source)
@@ -291,7 +346,7 @@ export class RenderingManager implements IRenderingManager {
                 }
             } else {
                 // Different columns - use waypoints
-                const componentVerticalDistance = Math.abs(toComponent.y - fromComponent.y);
+                const componentVerticalDistance = Math.abs(target.y - source.y);
                 const isOptimalSpacing = componentVerticalDistance >= 50 && componentVerticalDistance <= 60;
 
                 if (isOptimalSpacing) {
@@ -311,7 +366,12 @@ export class RenderingManager implements IRenderingManager {
         line.setAttribute('d', pathData);
     }
 
-    public addCanvasEventHandlers(canvas: Element): void {
+    public addCanvasEventHandlers(canvas: HTMLElement): void {
+        const dragDropManager: IDragDropManager = window.dragDropManager;
+        const componentEditor: IComponentEditor = window.componentEditor;
+        const contextMenuManager: IContextMenuManager = window.contextMenuManager;
+        const connectionManager: IConnectionManager = window.connectionManager;
+
         // Remove existing handlers to avoid duplicates
         const canvasElement = canvas as any;
         if (canvasElement._vrmMouseDownHandler) {
@@ -329,63 +389,42 @@ export class RenderingManager implements IRenderingManager {
             if (e.target === canvas) {
                 // Handle shift+click on empty canvas for clearing connections
                 if (e.shiftKey) {
-                    const connectionManager: IConnectionManager = window.connectionManager;
                     if (e.button === 0) { // Left click
                         connectionManager.handleShiftClickOnEmpty(e, 'primary');
                     }
                     e.preventDefault();
                     e.stopPropagation();
-                    return; // Don't proceed with selection - this prevents clearing the selection
+                    return; // Don't proceed with selection
                 }
 
-                const selectionManager: ISelectionManager = window.selectionManager;
-                selectionManager.startSelection(e);
+                this.selectionManager.startSelection(e);
             }
         };
 
         canvasElement._vrmMouseMoveHandler = (e: MouseEvent) => {
-            const stateManager: IStateManager = window.stateManager;
-            if (stateManager.getIsSelecting()) {
-                const selectionManager: ISelectionManager = window.selectionManager;
-                selectionManager.updateSelection(e);
+            if (this.selectionManager.isSelecting()) {
+                this.selectionManager.updateSelection(e);
             }
         };
 
         canvasElement._vrmMouseUpHandler = (e: MouseEvent) => {
-            const stateManager: IStateManager = window.stateManager;
-            if (stateManager.getIsSelecting()) {
-                const selectionManager: ISelectionManager = window.selectionManager;
-                selectionManager.endSelection(e);
+            if (this.selectionManager.isSelecting()) {
+                this.selectionManager.endSelection(e);
             }
         };
 
-        canvasElement._vrmContextMenuHandler = (e: MouseEvent) => {
-            if (e.target === canvas) {
-                // Handle shift+right-click on empty canvas for clearing secondary connections
-                if (e.shiftKey) {
-                    const connectionManager: IConnectionManager = window.connectionManager;
-                    connectionManager.handleShiftClickOnEmpty(e, 'secondary');
-                    return;
-                }
-            }
-
-            const contextMenuManager: IContextMenuManager = window.contextMenuManager;
-            contextMenuManager.handleRightClick(e);
-        };
-
-        // Add event listeners
+        // Add the handlers
         canvas.addEventListener('mousedown', canvasElement._vrmMouseDownHandler);
         canvas.addEventListener('mousemove', canvasElement._vrmMouseMoveHandler);
         canvas.addEventListener('mouseup', canvasElement._vrmMouseUpHandler);
-        canvas.addEventListener('contextmenu', canvasElement._vrmContextMenuHandler);
     }
 
     public static inject(): string {
         return `
-window.renderingManager = new (${RenderingManager.toString()})();
-
-// Make functions globally available
-window.renderComponents = (components) => window.renderingManager.renderComponents(components);
-`;
+            window.renderingManager = new (${RenderingManager.toString()})();
+            
+            // Make functions globally available for HTML onclick handlers
+            window.renderComponents = (components) => window.renderingManager.renderComponents(components);
+        `;
     }
 }

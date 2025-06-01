@@ -1,61 +1,69 @@
-import { 
-    VrmComponent, 
-    Position, 
-    GridSizes, 
+import {
+    VrmComponent,
+    Position,
+    GridSizes,
     DragHandlers,
     MultiDragHandlers,
     IStateManager,
     ISelectionManager,
-    CustomWindow 
+    CustomWindow
 } from '../../types';
+// Remove DocumentState import since we'll use window.documentState
+// import { DocumentState } from './DocumentState';
 
 declare const window: CustomWindow;
 
 export class StateManager implements IStateManager {
-    // Global state variables
+    private static instance: StateManager;
+    // Remove documentState property since we'll use window.documentState
+
+    // UI state variables only
     private currentZoom: number = 1;
-    private activeTab: string = 'preproc';
-    private preprocComponents: VrmComponent[] = [];
-    private postprocComponents: VrmComponent[] = [];
-    
-    // Drag and drop state
     private isDragging: boolean = false;
     private dragComponent: VrmComponent | null = null;
     private dragOffset: Position = { x: 0, y: 0 };
     private dragStartPos: Position = { x: 0, y: 0 };
     private dragHandlers: DragHandlers | null = null;
-    
-    // Multi-select state
     private isSelecting: boolean = false;
     private selectionStart: Position = { x: 0, y: 0 };
     private selectionEnd: Position = { x: 0, y: 0 };
     private selectedComponents: Set<string> = new Set();
     private selectionRect: SVGElement | null = null;
     private justFinishedSelecting: boolean = false;
-    
-    // Multi-drag state
     private isMultiDragging: boolean = false;
     private multiDragStartPositions: Map<string, Position> = new Map();
     private multiDragOffset: Position = { x: 0, y: 0 };
     private multiDragReferenceComponent: VrmComponent | null = null;
     private multiDragHandlers: MultiDragHandlers | null = null;
-    
-    // Context menu state
     private contextMenu: HTMLElement | null = null;
     private contextMenuPosition: Position = { x: 0, y: 0 };
     private isContextMenuOpen: boolean = false;
-    
+
     // Grid settings
-    private readonly GRID_SIZE_X: number = 32; // Horizontal grid spacing
-    private readonly GRID_SIZE_Y: number = 26; // Vertical grid spacing
-    
+    private readonly GRID_SIZE_X: number = 32;
+    private readonly GRID_SIZE_Y: number = 26;
+
+    private constructor() {
+        // Use window.documentState instead of creating a new instance
+        if (!window.documentState) {
+            throw new Error('DocumentState must be initialized before StateManager');
+        }
+    }
+
+    public static getInstance(): StateManager {
+        if (!StateManager.instance) {
+            StateManager.instance = new StateManager();
+        }
+        return StateManager.instance;
+    }
+
     // =================================================================
-    // GETTERS - Allow other classes to access state
+    // GETTERS - UI State Only
     // =================================================================
     public getCurrentZoom(): number { return this.currentZoom; }
-    public getActiveTab(): string { return this.activeTab; }
-    public getPreprocComponents(): VrmComponent[] { return this.preprocComponents; }
-    public getPostprocComponents(): VrmComponent[] { return this.postprocComponents; }
+    public getActiveTab(): string { return window.documentState.getCurrentSection(); }
+    public getPreprocComponents(): VrmComponent[] { return window.documentState.getComponents('preproc'); }
+    public getPostprocComponents(): VrmComponent[] { return window.documentState.getComponents('postproc'); }
     public getSelectedComponents(): Set<string> { return this.selectedComponents; }
     public getIsDragging(): boolean { return this.isDragging; }
     public getIsSelecting(): boolean { return this.isSelecting; }
@@ -76,13 +84,33 @@ export class StateManager implements IStateManager {
     public getMultiDragReferenceComponent(): VrmComponent | null { return this.multiDragReferenceComponent; }
     public getMultiDragHandlers(): MultiDragHandlers | null { return this.multiDragHandlers; }
     public getContextMenu(): HTMLElement | null { return this.contextMenu; }
-    
+
     // =================================================================
-    // SETTERS - Allow other classes to modify state
+    // SETTERS - UI State Only
     // =================================================================
-    public setActiveTab(tab: string): void { this.activeTab = tab; }
-    public setPreprocComponents(components: VrmComponent[]): void { this.preprocComponents = components; }
-    public setPostprocComponents(components: VrmComponent[]): void { this.postprocComponents = components; }
+    public setActiveTab(tab: string): void {
+        window.documentState.setCurrentSection(tab as 'preproc' | 'postproc');
+    }
+
+    public setPreprocComponents(components: VrmComponent[]): void {
+        // Delegate to DocumentState
+        components.forEach(component => {
+            window.documentState.updateComponent(component);
+        });
+    }
+
+    public setPostprocComponents(components: VrmComponent[]): void {
+        // Delegate to DocumentState
+        components.forEach(component => {
+            window.documentState.updateComponent(component);
+        });
+    }
+
+    public updateComponent(component: VrmComponent): void {
+        // Use window.documentState
+        window.documentState.updateComponent(component);
+    }
+
     public setSelectedComponents(components: Set<string>): void { this.selectedComponents = components; }
     public setIsDragging(dragging: boolean): void { this.isDragging = dragging; }
     public setIsSelecting(selecting: boolean): void { this.isSelecting = selecting; }
@@ -101,7 +129,7 @@ export class StateManager implements IStateManager {
     public setMultiDragReferenceComponent(component: VrmComponent | null): void { this.multiDragReferenceComponent = component; }
     public setMultiDragHandlers(handlers: MultiDragHandlers | null): void { this.multiDragHandlers = handlers; }
     public setContextMenu(menu: HTMLElement | null): void { this.contextMenu = menu; }
-    
+
     // =================================================================
     // UTILITY FUNCTIONS
     // =================================================================
@@ -111,72 +139,66 @@ export class StateManager implements IStateManager {
             y: Math.round(y / this.GRID_SIZE_Y) * this.GRID_SIZE_Y
         };
     }
-    
+
     public getComponentColor(type: string): string {
-        const colors: Record<string, string> = {
-            'IF': '#4CAF50',
-            'SELECTQUERY': '#2196F3', 
-            'INSERTUPDATEQUERY': '#FF9800',
-            'SET': '#9C27B0',
-            'TEMPLATE': '#795548',
-            'ERROR': '#F44336',
-            'EXTERNAL': '#607D8B',
-            'CSF': '#3F51B5',
-            'SCRIPT': '#FF5722'
-        };
-        return colors[type] || '#666666';
+        return window.documentState.getComponentColor(type);
     }
-    
+
     // =================================================================
-    // PUBLIC METHODS - Called from HTML and other managers
+    // PUBLIC METHODS - UI Operations
     // =================================================================
     public switchTab(tabName: string): void {
         // Update tab buttons
         document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
         const tabButton = document.getElementById(tabName + 'Tab');
         if (tabButton) tabButton.classList.add('active');
-        
+
         // Update section content
         document.querySelectorAll('.section-content').forEach(section => section.classList.remove('active'));
         const section = document.getElementById(tabName + 'Section');
         if (section) section.classList.add('active');
-        
-        this.activeTab = tabName;
-        
+
+        // Update DocumentState
+        window.documentState.setCurrentSection(tabName as 'preproc' | 'postproc');
+
         // Hide details panel when switching tabs
         const details = document.getElementById('componentDetails');
         if (details) details.style.display = 'none';
-        
+
         // Clear selection when switching tabs
         const selectionManager: ISelectionManager = window.selectionManager;
         if (selectionManager) {
             selectionManager.clearSelection();
         }
     }
-    
+
     public updateComponentCounts(): void {
         const preprocCount = document.getElementById('preprocCount');
         const postprocCount = document.getElementById('postprocCount');
-        
-        if (preprocCount) preprocCount.textContent = this.preprocComponents.length.toString();
-        if (postprocCount) postprocCount.textContent = this.postprocComponents.length.toString();
+
+        if (preprocCount) {
+            preprocCount.textContent = window.documentState.getComponents('preproc').length.toString();
+        }
+        if (postprocCount) {
+            postprocCount.textContent = window.documentState.getComponents('postproc').length.toString();
+        }
     }
-    
+
     public zoomIn(): void {
         this.currentZoom *= 1.2;
         this.updateZoom();
     }
-    
+
     public zoomOut(): void {
         this.currentZoom /= 1.2;
         this.updateZoom();
     }
-    
+
     public resetZoom(): void {
         this.currentZoom = 1;
         this.updateZoom();
     }
-    
+
     private updateZoom(): void {
         const canvases = document.querySelectorAll('.component-canvas') as NodeListOf<HTMLElement>;
         canvases.forEach(canvas => {
@@ -184,14 +206,14 @@ export class StateManager implements IStateManager {
             canvas.style.transformOrigin = '0 0';
         });
     }
-    
+
     // =================================================================
-    // INJECTION METHOD - Converts class to webview JavaScript
+    // INJECTION METHOD
     // =================================================================
     public static inject(): string {
         return `
-            // Inject StateManager class
-            window.stateManager = new (${StateManager.toString()})();
+            // Inject StateManager class as singleton
+            window.stateManager = (${StateManager.toString()}).getInstance();
             
             // Make functions globally available for HTML onclick handlers
             window.zoomIn = () => window.stateManager.zoomIn();
