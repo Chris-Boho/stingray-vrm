@@ -145,9 +145,9 @@ export class ConnectionManager {
             sourceComponent.j = [];
         }
 
-        // Ensure the j array has at least 2 elements
+        // Ensure the j array has at least 2 elements, initialized to -1 (no connection)
         while (sourceComponent.j.length < 2) {
-            sourceComponent.j.push(0);
+            sourceComponent.j.push(-1);
         }
 
         // Update the appropriate connection
@@ -177,11 +177,11 @@ export class ConnectionManager {
             return;
         }
 
-        // Remove the appropriate connection
+        // Remove the appropriate connection by setting it to -1 (no connection)
         if (connectionType === 'primary' && sourceComponent.j.length > 0) {
-            sourceComponent.j[0] = 0;
+            sourceComponent.j[0] = -1;
         } else if (connectionType === 'secondary' && sourceComponent.j.length > 1) {
-            sourceComponent.j[1] = 0;
+            sourceComponent.j[1] = -1;
         }
 
         // Send update to extension

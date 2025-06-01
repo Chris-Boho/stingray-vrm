@@ -131,6 +131,7 @@ export class DragDropManager implements IDragDropManager {
         // Update outgoing connections (where this component is the source)
         if (dragComponent.j && dragComponent.j.length > 0) {
             dragComponent.j.forEach((targetId: number, index: number) => {
+                // Only render connections that are actually set (not 0 or -1)
                 if (targetId > 0) {
                     const targetComponent = components.find(c => c.n === targetId);
                     if (targetComponent) {
@@ -144,7 +145,8 @@ export class DragDropManager implements IDragDropManager {
         components.forEach(component => {
             if (component.j && component.j.length > 0) {
                 component.j.forEach((targetId: number, index: number) => {
-                    if (targetId === dragComponent.n) {
+                    // Only render connections that are actually set (not 0 or -1)
+                    if (targetId > 0 && targetId === dragComponent.n) {
                         renderingManager.renderConnection(component, dragComponent, index === 0, dragComponent.section + 'Canvas');
                     }
                 });
@@ -367,6 +369,7 @@ export class DragDropManager implements IDragDropManager {
                 // Update outgoing connections (where this component is the source)
                 if (component.j && component.j.length > 0) {
                     component.j.forEach((targetId: number, index: number) => {
+                        // Only render connections that are actually set (not 0 or -1)
                         if (targetId > 0) {
                             const targetComponent = components.find(c => c.n === targetId);
                             if (targetComponent) {
@@ -380,7 +383,8 @@ export class DragDropManager implements IDragDropManager {
                 components.forEach(otherComponent => {
                     if (otherComponent.j && otherComponent.j.length > 0) {
                         otherComponent.j.forEach((targetId: number, index: number) => {
-                            if (targetId === component.n) {
+                            // Only render connections that are actually set (not 0 or -1)
+                            if (targetId > 0 && targetId === component.n) {
                                 renderingManager.renderConnection(otherComponent, component, index === 0, component.section + 'Canvas');
                             }
                         });
