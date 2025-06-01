@@ -79,6 +79,7 @@ export class DragDropManager implements IDragDropManager {
 
     private handleDrag(e: MouseEvent, dragComponent: VrmComponent): void {
         const stateManager: IStateManager = window.stateManager;
+        const renderingManager: IRenderingManager = window.renderingManager;
 
         if (!stateManager.getIsDragging() || !dragComponent) return;
 
@@ -102,13 +103,12 @@ export class DragDropManager implements IDragDropManager {
         newX = snapped.x;
         newY = snapped.y;
 
-        // Ensure component stays within canvas bounds
+        // During drag, only enforce horizontal bounds
         const iconSize = 30;
         const canvasWidth = parseInt(canvas.getAttribute('width') || '1200');
-        const canvasHeight = parseInt(canvas.getAttribute('height') || '2000');
-
         newX = Math.max(0, Math.min(newX, canvasWidth - iconSize));
-        newY = Math.max(0, Math.min(newY, canvasHeight - iconSize));
+        // Allow vertical movement beyond current canvas height during drag
+        newY = Math.max(0, newY);
 
         // Update component position in the data model
         dragComponent.x = newX;
@@ -123,17 +123,24 @@ export class DragDropManager implements IDragDropManager {
             groupElement.setAttribute('data-y', newY.toString());
         }
 
+        // Update canvas height during drag if needed
+        const sectionComponents = window.documentState.getComponents(dragComponent.section);
+        const requiredHeight = renderingManager.calculateRequiredCanvasHeight(sectionComponents);
+        const currentHeight = parseInt(canvas.getAttribute('height') || '2000');
+        if (requiredHeight > currentHeight) {
+            canvas.setAttribute('height', requiredHeight.toString());
+        }
+
         // Update all connections for this component
-        const components = dragComponent.section === 'preproc' ?
+        const allComponents = dragComponent.section === 'preproc' ?
             stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
-        const renderingManager: IRenderingManager = window.renderingManager;
 
         // Update outgoing connections (where this component is the source)
         if (dragComponent.j && dragComponent.j.length > 0) {
             dragComponent.j.forEach((targetId: number, index: number) => {
                 // Only render connections that are actually set (not 0 or -1)
                 if (targetId > 0) {
-                    const targetComponent = components.find(c => c.n === targetId);
+                    const targetComponent = allComponents.find(c => c.n === targetId);
                     if (targetComponent) {
                         renderingManager.renderConnection(dragComponent, targetComponent, index === 0, dragComponent.section + 'Canvas');
                     }
@@ -142,7 +149,7 @@ export class DragDropManager implements IDragDropManager {
         }
 
         // Update incoming connections (where this component is the target)
-        components.forEach(component => {
+        allComponents.forEach(component => {
             if (component.j && component.j.length > 0) {
                 component.j.forEach((targetId: number, index: number) => {
                     // Only render connections that are actually set (not 0 or -1)
@@ -333,6 +340,7 @@ export class DragDropManager implements IDragDropManager {
 
         // Get rendering manager once
         const renderingManager: IRenderingManager = window.renderingManager;
+        let maxY = 0;
 
         // Apply movement to all selected components
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
@@ -344,17 +352,19 @@ export class DragDropManager implements IDragDropManager {
                 let componentNewX = startPosition.x + deltaX;
                 let componentNewY = startPosition.y + deltaY;
 
-                // Ensure component stays within canvas bounds
+                // During drag, only enforce horizontal bounds
                 const iconSize = 30;
                 const canvasWidth = parseInt(canvas.getAttribute('width') || '1200');
-                const canvasHeight = parseInt(canvas.getAttribute('height') || '2000');
-
                 componentNewX = Math.max(0, Math.min(componentNewX, canvasWidth - iconSize));
-                componentNewY = Math.max(0, Math.min(componentNewY, canvasHeight - iconSize));
+                // Allow vertical movement beyond current canvas height during drag
+                componentNewY = Math.max(0, componentNewY);
 
                 // Update component position in the data
                 component.x = componentNewX;
                 component.y = componentNewY;
+
+                // Track the highest y coordinate
+                maxY = Math.max(maxY, componentNewY);
 
                 // Update the visual position immediately without re-rendering
                 const groupElement = document.querySelector(`[data-component-id="${compId}"][data-section="${compSection}"]`) as HTMLElement;
@@ -392,6 +402,13 @@ export class DragDropManager implements IDragDropManager {
                 });
             }
         });
+
+        // Update canvas height during drag if needed
+        const requiredHeight = renderingManager.calculateRequiredCanvasHeight(components);
+        const currentHeight = parseInt(canvas.getAttribute('height') || '2000');
+        if (requiredHeight > currentHeight) {
+            canvas.setAttribute('height', requiredHeight.toString());
+        }
 
         // Restore selection states without re-rendering
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
@@ -436,8 +453,8 @@ export class DragDropManager implements IDragDropManager {
         // Collect all moved components
         const movedComponents: VrmComponent[] = [];
         stateManager.getSelectedComponents().forEach((componentKey: string) => {
-            const [section, id] = componentKey.split('-');
-            const components = section === 'preproc' ?
+            const [compSection, id] = componentKey.split('-');
+            const components = compSection === 'preproc' ?
                 stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
             const component = components.find((c: VrmComponent) => c.n === parseInt(id));
 

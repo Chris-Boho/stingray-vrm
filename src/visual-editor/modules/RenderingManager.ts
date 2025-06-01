@@ -64,6 +64,10 @@ export class RenderingManager implements IRenderingManager {
         const section = canvasId.replace('Canvas', '') as 'preproc' | 'postproc';
         const latestComponents = window.documentState.getComponents(section);
 
+        // Calculate and set the required canvas height
+        const requiredHeight = this.calculateRequiredCanvasHeight(latestComponents);
+        canvas.setAttribute('height', requiredHeight.toString());
+
         // Clear the canvas
         canvas.innerHTML = '';
 
@@ -437,5 +441,19 @@ export class RenderingManager implements IRenderingManager {
             // Make functions globally available for HTML onclick handlers
             window.renderComponents = (components) => window.renderingManager.renderComponents(components);
         `;
+    }
+
+    public calculateRequiredCanvasHeight(components: VrmComponent[]): number {
+        if (components.length === 0) {
+            return 800; // Default minimum height
+        }
+
+        // Find the highest y coordinate among all components
+        const highestY = Math.max(...components.map(comp => comp.y));
+        const iconSize = 30; // Component icon size
+        const buffer = 200; // Additional space below the highest component
+
+        // Return the highest y coordinate plus icon size and buffer
+        return Math.max(800, highestY + iconSize + buffer);
     }
 }

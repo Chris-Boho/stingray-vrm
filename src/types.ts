@@ -201,6 +201,7 @@ export interface IRenderingManager {
     renderComponent(component: VrmComponent, canvasId: string): void;
     renderConnection(fromComponent: VrmComponent, toComponent: VrmComponent, isPrimary: boolean, canvasId: string): void;
     addCanvasEventHandlers(canvas: HTMLElement): void;
+    calculateRequiredCanvasHeight(components: VrmComponent[]): number;
 }
 
 // Drag Drop Manager interface
