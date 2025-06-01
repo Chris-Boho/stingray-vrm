@@ -312,17 +312,17 @@ export class ComponentPalette {
 
     private insertComponentAtPosition(componentType: string, x: number, y: number): void {
         const stateManager: IStateManager = window.stateManager;
+        const documentState = window.documentState;
 
         // Snap to grid
         const snapped = stateManager.snapToGrid(x, y);
 
-        // Get current section components
+        // Get current section
         const currentSection = stateManager.getActiveTab() as 'preproc' | 'postproc';
-        const existingComponents = currentSection === 'preproc' ?
-            stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+        const existingComponents = documentState.getComponents(currentSection);
 
         try {
-            // FIXED: Access ComponentTemplates properly from the global window
+            // Access ComponentTemplates properly from the global window
             const ComponentTemplates = this.getComponentTemplatesClass();
             if (!ComponentTemplates) {
                 throw new Error('ComponentTemplates class not available - ensure it is properly injected into the window object');
@@ -339,21 +339,16 @@ export class ComponentPalette {
 
             console.log('Created new component:', newComponent);
 
-            // Add to state
-            if (currentSection === 'preproc') {
-                stateManager.getPreprocComponents().push(newComponent);
-            } else {
-                stateManager.getPostprocComponents().push(newComponent);
-            }
+            // Add to DocumentState
+            documentState.addComponent(newComponent);
 
-            // Update component counts
+            // Update component counts in state manager
             stateManager.updateComponentCounts();
 
             // Re-render the current section
             const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = currentSection + 'Canvas';
-            const components = currentSection === 'preproc' ?
-                stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+            const components = documentState.getComponents(currentSection);
 
             renderingManager.renderComponentSection(components, canvasId);
 

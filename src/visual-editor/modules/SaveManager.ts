@@ -159,11 +159,46 @@ export class SaveManager {
       if (dirtyComponents.length > 0) {
         console.log(`SaveManager: Saving ${dirtyComponents.length} dirty components`);
 
-        // Update each dirty component in the XML
-        for (const component of dirtyComponents) {
-          currentContent = this.xmlGenerator.updateComponentInXml(currentContent, component);
+        // First, handle any new components that need to be inserted
+        const newComponents = dirtyComponents.filter(component => {
+          // Check if component exists in the XML
+          const sectionTag = component.section === 'preproc' ? 'preproc' : 'postproc';
+          const sectionMatch = currentContent.match(new RegExp(`<${sectionTag}>([\\s\\S]*?)<\\/${sectionTag}>`));
+          if (!sectionMatch) return true;
+
+          // Look for component with this ID in the section
+          const componentRegex = new RegExp(`<c>\\s*<n>${component.n}</n>[\\s\\S]*?</c>`, 'g');
+          return !componentRegex.test(sectionMatch[1]);
+        });
+
+        if (newComponents.length > 0) {
+          console.log(`SaveManager: Inserting ${newComponents.length} new components`);
+          for (const component of newComponents) {
+            const sectionTag = component.section === 'preproc' ? 'preproc' : 'postproc';
+            const sectionEndTag = `</${sectionTag}>`;
+            const endIndex = currentContent.indexOf(sectionEndTag);
+            if (endIndex === -1) {
+              throw new Error(`Could not find ${sectionEndTag} tag in document`);
+            }
+
+            // Insert the new component before the closing tag with proper indentation
+            const componentXml = this.xmlGenerator.generateComponentXml(component);
+            const beforeEndTag = currentContent.substring(0, endIndex);
+            const afterEndTag = currentContent.substring(endIndex);
+            currentContent = beforeEndTag + '\t\t' + componentXml + '\n\t\t' + afterEndTag;
+          }
+          hasChanges = true;
         }
-        hasChanges = true;
+
+        // Then handle updates to existing components
+        const existingComponents = dirtyComponents.filter(component => !newComponents.includes(component));
+        if (existingComponents.length > 0) {
+          console.log(`SaveManager: Updating ${existingComponents.length} existing components`);
+          for (const component of existingComponents) {
+            currentContent = this.xmlGenerator.updateComponentInXml(currentContent, component);
+          }
+          hasChanges = true;
+        }
       }
 
       // Save HTML if dirty

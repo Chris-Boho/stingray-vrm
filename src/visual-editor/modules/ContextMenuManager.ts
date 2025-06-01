@@ -511,6 +511,7 @@ export class ContextMenuManager implements IContextMenuManager {
         this.closeContextMenu();
 
         const stateManager: IStateManager = window.stateManager;
+        const documentState = window.documentState;
 
         try {
             // Get context menu position for component placement
@@ -521,8 +522,7 @@ export class ContextMenuManager implements IContextMenuManager {
 
             // Get current section and existing components
             const currentSection = stateManager.getActiveTab() as 'preproc' | 'postproc';
-            const existingComponents = currentSection === 'preproc' ?
-                stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+            const existingComponents = documentState.getComponents(currentSection);
 
             // Access ComponentTemplates from window (it should be available in the context)
             const ComponentTemplates = (window as any).ComponentTemplates;
@@ -541,21 +541,16 @@ export class ContextMenuManager implements IContextMenuManager {
 
             console.log('Created new component via context menu:', newComponent);
 
-            // Add to state
-            if (currentSection === 'preproc') {
-                stateManager.getPreprocComponents().push(newComponent);
-            } else {
-                stateManager.getPostprocComponents().push(newComponent);
-            }
+            // Add to DocumentState
+            documentState.addComponent(newComponent);
 
-            // Update component counts
+            // Update component counts in state manager
             stateManager.updateComponentCounts();
 
             // Re-render the current section
             const renderingManager: IRenderingManager = window.renderingManager;
             const canvasId = currentSection + 'Canvas';
-            const components = currentSection === 'preproc' ?
-                stateManager.getPreprocComponents() : stateManager.getPostprocComponents();
+            const components = documentState.getComponents(currentSection);
 
             renderingManager.renderComponentSection(components, canvasId);
 
