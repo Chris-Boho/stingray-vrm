@@ -169,7 +169,8 @@ export class RenderingManager implements IRenderingManager {
         labelText.classList.add('component-label');
 
         const commentText = component.c || 'No comment';
-        labelText.textContent = `${component.n}: ${commentText}`;
+        const truncatedComment = commentText.length > 20 ? commentText.substring(0, 20) + '...' : commentText;
+        labelText.textContent = `${component.n}: ${truncatedComment}`;
 
         // Watchpoint indicator - position relative to 0,0
         if (component.wp) {

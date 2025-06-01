@@ -556,18 +556,18 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private generateCodeFileHeader(componentId?: number, componentType?: string, language?: string): string {
         const timestamp = new Date().toLocaleString();
         return `/*
- * VRM Component Code Editor
- * Component ID: ${componentId || 'Unknown'}
- * Component Type: ${componentType || 'Unknown'}
- * Language: ${language || 'Unknown'}
- * Generated: ${timestamp}
- * 
- * NOTE: This is a temporary file for editing component code.
- * Changes will be synced back to the VRM file when you save.
- * Do not move or rename this file.
- */
+            * VRM Component Code Editor
+            * Component ID: ${componentId || 'Unknown'}
+            * Component Type: ${componentType || 'Unknown'}
+            * Language: ${language || 'Unknown'}
+            * Generated: ${timestamp}
+            * 
+            * NOTE: This is a temporary file for editing component code.
+            * Changes will be synced back to the VRM file when you save.
+            * Do not move or rename this file.
+            */
 
-`;
+            `;
     }
 
     // Enhanced code file watcher with auto-sync capabilities
@@ -1001,71 +1001,6 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 }, 100);
             }
         });
-    }
-
-    private getLastUpdatedComponent(): VrmComponent | null {
-        return this.lastUpdatedComponent;
-    }
-
-    private updateLastComponent(component: VrmComponent): void {
-        this.lastUpdatedComponent = { ...component };
-    }
-
-    private async handleWebviewMessage(message: any, webviewPanel: vscode.WebviewPanel): Promise<void> {
-        switch (message.command) {
-            case 'updateComponent': {
-                const component = message.component;
-                if (!component) {
-                    console.error('No component data received in updateComponent message');
-                    return;
-                }
-
-                // Create a workspace edit to update the component
-                const edit = new vscode.WorkspaceEdit();
-                const document = vscode.window.activeTextEditor?.document;
-                if (!document) return;
-
-                // Get the current XML content
-                const xmlContent = document.getText();
-                const xmlDoc = new DOMParser().parseFromString(xmlContent, 'text/xml');
-                if (!xmlDoc) return;
-
-                // Find the component section (preproc or postproc)
-                const section = component.section === 'preproc' ? 'preproc' : 'postproc';
-                const sectionElement = xmlDoc.querySelector(section);
-                if (!sectionElement) return;
-
-                // Find the component element
-                const componentElement = Array.from(sectionElement.children).find(
-                    (el: Element) => el.getAttribute('n') === component.n.toString()
-                );
-                if (!componentElement) return;
-
-                // Update component attributes and values
-                this.updateComponentElement(componentElement, component);
-
-                // Convert back to string and create the edit
-                const serializer = new XMLSerializer();
-                const newXmlContent = serializer.serializeToString(xmlDoc);
-                const fullRange = new vscode.Range(
-                    document.positionAt(0),
-                    document.positionAt(xmlContent.length)
-                );
-
-                // Apply the edit and mark the document as dirty
-                edit.replace(document.uri, fullRange, newXmlContent);
-                await vscode.workspace.applyEdit(edit);
-
-                // Always mark the document as dirty when component values change
-                if (message.isValueChange) {
-                    // The document is already marked as dirty by the workspace edit
-                    // We just need to update the webview
-                    await this.updateWebview(webviewPanel, document, true);
-                }
-                break;
-            }
-            // ... rest of the cases ...
-        }
     }
 
     private updateComponentElement(element: Element, component: any): void {
