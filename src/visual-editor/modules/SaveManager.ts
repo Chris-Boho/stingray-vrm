@@ -148,29 +148,17 @@ export class SaveManager {
    */
   private async saveDocument(document: vscode.TextDocument): Promise<void> {
     try {
-      console.log('SaveManager: Saving document state');
-
-      // Get current document content
       let currentContent = document.getText();
       let hasChanges = false;
 
-      // Save dirty components
+      // First handle component changes
       const dirtyComponents = this.documentState.getDirtyComponents();
       if (dirtyComponents.length > 0) {
-        console.log(`SaveManager: Saving ${dirtyComponents.length} dirty components`);
+        // Separate new and existing components
+        const newComponents = dirtyComponents.filter(component => !component.n);
+        const existingComponents = dirtyComponents.filter(component => component.n);
 
-        // First, handle any new components that need to be inserted
-        const newComponents = dirtyComponents.filter(component => {
-          // Check if component exists in the XML
-          const sectionTag = component.section === 'preproc' ? 'preproc' : 'postproc';
-          const sectionMatch = currentContent.match(new RegExp(`<${sectionTag}>([\\s\\S]*?)<\\/${sectionTag}>`));
-          if (!sectionMatch) return true;
-
-          // Look for component with this ID in the section
-          const componentRegex = new RegExp(`<c>\\s*<n>${component.n}</n>[\\s\\S]*?</c>`, 'g');
-          return !componentRegex.test(sectionMatch[1]);
-        });
-
+        // Handle new components first
         if (newComponents.length > 0) {
           console.log(`SaveManager: Inserting ${newComponents.length} new components`);
           for (const component of newComponents) {
@@ -191,7 +179,6 @@ export class SaveManager {
         }
 
         // Then handle updates to existing components
-        const existingComponents = dirtyComponents.filter(component => !newComponents.includes(component));
         if (existingComponents.length > 0) {
           console.log(`SaveManager: Updating ${existingComponents.length} existing components`);
           for (const component of existingComponents) {
@@ -201,25 +188,37 @@ export class SaveManager {
         }
       }
 
+      // Handle HTML and JS changes separately to avoid conflicts
+      const vrmDocument = new VrmDocument(document);
+      let updatedContent = currentContent;
+
       // Save HTML if dirty
       if (this.documentState.isHtmlContentDirty()) {
         console.log('SaveManager: Saving HTML content');
-        const vrmDocument = new VrmDocument(document);
-        currentContent = await vrmDocument.updateHtmlContent(this.documentState.getHtmlContent());
-        hasChanges = true;
+        try {
+          updatedContent = await vrmDocument.updateHtmlContent(this.documentState.getHtmlContent());
+          hasChanges = true;
+        } catch (error) {
+          console.error('Error saving HTML content:', error);
+          throw new Error(`Failed to save HTML content: ${error}`);
+        }
       }
 
       // Save JS if dirty
       if (this.documentState.isJsContentDirty()) {
         console.log('SaveManager: Saving JavaScript content');
-        const vrmDocument = new VrmDocument(document);
-        currentContent = await vrmDocument.updateJsContent(this.documentState.getJsContent());
-        hasChanges = true;
+        try {
+          updatedContent = await vrmDocument.updateJsContent(this.documentState.getJsContent());
+          hasChanges = true;
+        } catch (error) {
+          console.error('Error saving JavaScript content:', error);
+          throw new Error(`Failed to save JavaScript content: ${error}`);
+        }
       }
 
       // Only apply workspace edit if we have changes
       if (hasChanges) {
-        await this.applyWorkspaceEdit(document, currentContent);
+        await this.applyWorkspaceEdit(document, updatedContent);
         this.documentState.clearDirtyState();
         console.log('SaveManager: ✅ Document saved successfully');
       } else {

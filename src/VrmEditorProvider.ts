@@ -65,6 +65,9 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             ]
         };
 
+        // Check for existing temp files and reconnect them
+        await this.checkAndReconnectTempFiles(document);
+
         // Initialize webview content with VS Code API injected
         await this.updateWebview(webviewPanel, document);
 
@@ -136,17 +139,15 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         // Set up document change listener to update webview
         const changeDocumentSubscription = this.setupDocumentChangeListener(document, webviewPanel);
 
-        // Clean up temp files and watchers when editor is disposed
-        webviewPanel.onDidDispose(
-            () => {
-                this.cleanupTempFiles(document.uri.fsPath);
-                this.cleanupTempFileWatchers(document.uri.fsPath);
-                this.cleanupCodeEditorWatchers(document.uri.fsPath);
-                changeDocumentSubscription.dispose();
-            },
-            null,
-            this.context.subscriptions
-        );
+        // Set up disposal when the webview panel is closed
+        webviewPanel.onDidDispose(() => {
+            const documentPath = document.uri.fsPath;
+            this.cleanupTempFiles(documentPath);
+            this.cleanupTempFileWatchers(documentPath);
+            this.tempFiles.delete(documentPath);
+            this.tempFileWatchers.delete(documentPath);
+            changeDocumentSubscription.dispose();
+        });
     }
 
     // =================================================================
@@ -733,7 +734,16 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
             const tempFilePath = await this.createTempFile(document, 'html', htmlContent);
             const tempDocument = await vscode.workspace.openTextDocument(tempFilePath);
-            await vscode.window.showTextDocument(tempDocument, { viewColumn: vscode.ViewColumn.Beside });
+
+            // Get the active editor group
+            const activeEditorGroup = vscode.window.tabGroups.activeTabGroup;
+            const activeColumn = activeEditorGroup.viewColumn;
+
+            // Open the editor in a new tab next to the current one
+            await vscode.window.showTextDocument(tempDocument, {
+                viewColumn: activeColumn,
+                preview: false
+            });
 
             // Set up auto-save watcher for this temp file
             await this.setupTempFileWatcher(tempDocument, document, 'html');
@@ -755,7 +765,16 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
             const tempFilePath = await this.createTempFile(document, 'js', jsContent);
             const tempDocument = await vscode.workspace.openTextDocument(tempFilePath);
-            await vscode.window.showTextDocument(tempDocument, { viewColumn: vscode.ViewColumn.Beside });
+
+            // Get the active editor group
+            const activeEditorGroup = vscode.window.tabGroups.activeTabGroup;
+            const activeColumn = activeEditorGroup.viewColumn;
+
+            // Open the editor in a new tab next to the current one
+            await vscode.window.showTextDocument(tempDocument, {
+                viewColumn: activeColumn,
+                preview: false
+            });
 
             // Set up auto-save watcher for this temp file
             await this.setupTempFileWatcher(tempDocument, document, 'js');
@@ -834,20 +853,34 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private async setupTempFileWatcher(tempDoc: vscode.TextDocument, originalDoc: vscode.TextDocument, type: 'html' | 'js'): Promise<void> {
         const watcher = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
             if (savedDoc.uri.fsPath === tempDoc.uri.fsPath) {
+                // Create a status bar item for this save operation
+                const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+                statusBarItem.text = `$(sync~spin) Saving ${type.toUpperCase()} changes to VRM file...`;
+                statusBarItem.show();
+
                 try {
                     console.log(`Syncing ${type.toUpperCase()} changes from temp file to VRM using SaveManager`);
 
+                    // First update the content in the VRM file
                     if (type === 'html') {
                         await this.saveManager.updateHtmlContent(originalDoc, savedDoc.getText());
                     } else {
                         await this.saveManager.updateJsContent(originalDoc, savedDoc.getText());
                     }
 
-                    console.log(`✅ ${type.toUpperCase()} changes synced successfully - document is now dirty`);
+                    // Then save the VRM file
+                    await originalDoc.save();
+
+                    // Show a success notification
+                    vscode.window.showInformationMessage(`✅ ${type.toUpperCase()} changes saved to VRM file successfully`);
+                    console.log(`✅ ${type.toUpperCase()} changes synced and VRM file saved successfully`);
 
                 } catch (error) {
                     console.error(`Error syncing ${type.toUpperCase()} changes:`, error);
                     this.vscodeApiHandler.showNotification(`Error syncing ${type.toUpperCase()} changes: ${error}`, 'error');
+                } finally {
+                    // Always dispose the status bar item, whether there was an error or not
+                    statusBarItem.dispose();
                 }
             }
         });
@@ -1070,5 +1103,61 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 element.appendChild(valueElement);
             });
         }
+    }
+
+    private async checkAndReconnectTempFiles(document: vscode.TextDocument): Promise<void> {
+        try {
+            const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+            if (!workspaceFolder) {
+                return;
+            }
+
+            const tempDir = path.join(workspaceFolder.uri.fsPath, '.vscode', 'vrm-editor');
+            const baseName = path.basename(document.uri.fsPath, '.vrm');
+
+            // Check for both HTML and JS temp files
+            const tempFiles = [
+                { type: 'html', pattern: `${baseName}.vrm.html` },
+                { type: 'js', pattern: `${baseName}.vrm.js` }
+            ];
+
+            for (const { type, pattern } of tempFiles) {
+                const tempFilePath = path.join(tempDir, pattern);
+                try {
+                    // Check if temp file exists
+                    await fs.promises.access(tempFilePath);
+
+                    // File exists, just set up the watcher
+                    const tempDocument = await vscode.workspace.openTextDocument(tempFilePath);
+                    await this.setupTempFileWatcher(tempDocument, document, type as 'html' | 'js');
+
+                    // Track the temp file for cleanup
+                    const documentPath = document.uri.fsPath;
+                    if (!this.tempFiles.has(documentPath)) {
+                        this.tempFiles.set(documentPath, []);
+                    }
+                    this.tempFiles.get(documentPath)!.push(tempFilePath);
+
+                    console.log(`Reconnected ${type.toUpperCase()} temp file watcher:`, tempFilePath);
+
+                } catch (error) {
+                    // File doesn't exist or can't be accessed, which is fine
+                    console.log(`No existing ${type} temp file found for:`, document.uri.fsPath);
+                }
+            }
+        } catch (error) {
+            console.error('Error checking for temp files:', error);
+        }
+    }
+
+    public dispose(): void {
+        // Clean up all temp files and watchers
+        for (const [documentPath] of this.tempFiles) {
+            this.cleanupTempFiles(documentPath);
+            this.cleanupTempFileWatchers(documentPath);
+        }
+        this.tempFiles.clear();
+        this.tempFileWatchers.clear();
+        this.codeEditorWatchers.clear();
     }
 }
