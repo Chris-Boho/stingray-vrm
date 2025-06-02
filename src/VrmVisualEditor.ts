@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { VrmComponent } from './types';
 import { ComponentParser } from './visual-editor/ComponentParser';
@@ -32,7 +33,26 @@ export class VrmVisualEditor {
     }
 
     public generateMainWebviewHtml(allComponents: VrmComponent[]): string {
-        return this.htmlGenerator.generateMainWebviewHtml(this.webview, allComponents);
+        // Get the path to the React app's index.html
+        const reactAppPath = vscode.Uri.file(
+            path.join(this.context.extensionPath, 'out', 'react-app', 'index.html')
+        );
+        
+        // Convert the local path to a webview URI
+        const reactAppUri = this.webview.asWebviewUri(reactAppPath);
+        
+        return `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>VRM Editor</title>
+            </head>
+            <body>
+                <div id="root"></div>
+                <script type="module" src="${reactAppUri}"></script>
+            </body>
+            </html>`;
     }
 
     public updateWebview(components: VrmComponent[]): void {
