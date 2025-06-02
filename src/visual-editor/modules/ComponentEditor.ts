@@ -24,6 +24,7 @@ export class ComponentEditor implements IComponentEditor {
         }
         this.initializeMonaco();
         this.setupEventListeners();
+        this.setupGlobalFunctions();
     }
 
     public static getInstance(): ComponentEditor {
@@ -43,6 +44,32 @@ export class ComponentEditor implements IComponentEditor {
                     const section = change.component?.section || 'preproc';
                     const components = window.documentState.getComponents(section);
                     renderingManager.renderComponentSection(components, `${section}Canvas`);
+                }
+            }
+        });
+
+        // Listen for messages from the extension
+        window.addEventListener('message', async (event) => {
+            const message = event.data;
+            console.log('Received message in webview:', message);
+            
+            if (message.command === 'updateEditorContent' && message.editorId) {
+                console.log('Processing updateEditorContent for editorId:', message.editorId);
+                console.log('Current monacoEditors keys:', Array.from(this.monacoEditors.keys()));
+                
+                const editor = this.monacoEditors.get(message.editorId);
+                if (editor) {
+                    console.log('Found Monaco editor, updating value');
+                    editor.setValue(message.content);
+                } else {
+                    console.log('Monaco editor not found, trying fallback input');
+                    const hiddenInput = document.getElementById(`${message.editorId}_value`) as HTMLInputElement;
+                    if (hiddenInput) {
+                        console.log('Found fallback input, updating value');
+                        hiddenInput.value = message.content;
+                    } else {
+                        console.error('Could not find editor or fallback input for editorId:', message.editorId);
+                    }
                 }
             }
         });
@@ -737,18 +764,26 @@ export class ComponentEditor implements IComponentEditor {
         }
 
         const component = window.currentEditingComponent;
-        if (!component) return;
+        if (!component) {
+            console.error('No component is currently being edited');
+            return;
+        }
 
+        // Generate a more descriptive filename with section and component ID
+        const filename = `component_${component.section || 'unknown'}_${component.n || 'new'}_${editorId}`;
+        
         // Send message to extension to open external editor
-        let vscode = window.vscode;
-        if (vscode && vscode.postMessage) {
+        const vscode = window.vscode;
+        if (vscode?.postMessage) {
             vscode.postMessage({
-                command: 'openCodeEditor',
+                command: 'openComponentEditor',
                 content: content,
                 language: language,
-                filename: `component_${component.n}_${editorId}`,
-                componentId: component.n,
-                componentType: component.t
+                filename: filename,
+                component: {
+                    ...component,
+                    editorId: editorId  // Ensure editorId is included in the component object
+                }
             });
         }
     }
@@ -1721,6 +1756,11 @@ export class ComponentEditor implements IComponentEditor {
     // STATIC INJECTION METHOD
     // =================================================================
 
+    private setupGlobalFunctions(): void {
+        // Make functions globally available for HTML onclick handlers
+        (window as any).openInVSCode = this.openInVSCode.bind(this);
+    }
+
     public static inject(): string {
         return `
             window.componentEditor = new (${ComponentEditor.toString()})();
@@ -1734,6 +1774,7 @@ export class ComponentEditor implements IComponentEditor {
             window.addSetVariable = () => window.componentEditor.addSetVariable();
             window.removeSetVariable = (index) => window.componentEditor.removeSetVariable(index);
             window.saveComponentChanges = (componentId) => window.componentEditor.saveComponentChanges(componentId);
+            window.openInVSCode = (editorId, language, label) => window.componentEditor.openInVSCode(editorId, language, label);
         `;
     }
 }

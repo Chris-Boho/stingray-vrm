@@ -15,9 +15,11 @@ import { DocumentState } from './visual-editor/modules/DocumentState';
 export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private static readonly viewType = 'vrmEditor.vrmEditor';
     private tempFiles: Map<string, string[]> = new Map();
+    private componentTempFiles: Map<string, string> = new Map();
     private tempFileWatchers: Map<string, vscode.Disposable[]> = new Map();
     private codeEditorWatchers: Map<string, vscode.Disposable> = new Map();
     private vscodeApiHandler: VSCodeApiHandler;
+    private currentDocument: vscode.TextDocument | null = null;
     private saveManager: SaveManager;
     private documentState: DocumentState;
     private originalComponents: Map<number, VrmComponent> = new Map();
@@ -25,7 +27,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
     constructor(private context: vscode.ExtensionContext) {
         this.vscodeApiHandler = VSCodeApiHandler.getInstance();
-        this.saveManager = SaveManager.getInstance();
+        // Initialize SaveManager with this provider instance
+        this.saveManager = SaveManager.getInstance(this);
         this.documentState = DocumentState.getInstance();
     }
 
@@ -49,6 +52,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
+        // Set the current document
+        this.currentDocument = document;
         // Register the webview panel with VSCodeApiHandler
         this.vscodeApiHandler.registerWebviewPanel(document.uri.toString(), webviewPanel);
 
@@ -104,6 +109,16 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                             await this.saveManager.deleteComponent(document, message.component, webviewPanel);
                             break;
 
+                        case 'openComponentEditor':
+                            await this.openComponentEditor(
+                                document,
+                                message.content,
+                                message.language,
+                                message.filename,
+                                message.component
+                            );
+                            break;
+                            
                         case 'openCodeEditor':
                             await this.openCodeEditor(
                                 message.content,
@@ -756,6 +771,95 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         }
     }
 
+    private async openComponentEditor(
+        document: vscode.TextDocument, 
+        content: string, 
+        language: string, 
+        filename: string,
+        component?: { n?: number, t?: string, editorId?: string }
+    ): Promise<void> {
+        try {
+            console.log(`Opening ${language} component editor for:`, document.uri.fsPath);
+            
+            const componentId = component?.n;
+            const componentType = component?.t;
+            // Get editorId from the component object or from the component's editorId property
+            const editorId = component?.editorId || (component as any)?.values?.editorId;
+
+            // For SQL, we'll handle it differently - no auto-save back to VRM file
+            if (language.toLowerCase() === 'sql') {
+                // Create a more descriptive filename based on the VRM file and component info
+                const vrmFilename = path.basename(document.uri.fsPath, '.vrm');
+                const componentSection = component?.t || 'unknown';
+                const componentId = component?.n || 'new';
+                const baseFilename = `${vrmFilename}_${componentSection}_${componentId}`;
+                
+                const tempFilePath = await this.createTempFile(document, 'sql', content, baseFilename);
+                const tempDocument = await vscode.workspace.openTextDocument(tempFilePath);
+                
+                // Get the active editor group
+                const activeEditorGroup = vscode.window.tabGroups.activeTabGroup;
+                const activeColumn = activeEditorGroup.viewColumn;
+
+                // Open the editor in a new tab next to the current one
+                const editor = await vscode.window.showTextDocument(tempDocument, {
+                    viewColumn: activeColumn ?? vscode.ViewColumn.Beside,
+                    preview: false
+                });
+
+                // Set the language mode for syntax highlighting
+                await vscode.languages.setTextDocumentLanguage(tempDocument, 'sql');
+                
+                // Note: Setting a custom tab title requires a VSCode extension
+                // The tab will show the filename by default which includes the component info
+
+                // Set up a save handler that updates the webview but doesn't save to VRM file
+                const disposable = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
+                    if (savedDoc.uri.fsPath === tempDocument.uri.fsPath) {
+                        console.log('SQL file saved, updating webview with editorId:', editorId);
+                        // Send message to webview to update the editor content
+                        const panel = this.vscodeApiHandler.getWebviewPanel(document.uri.toString());
+                        if (panel) {
+                            console.log('Found webview panel, posting message');
+                            panel.webview.postMessage({
+                                command: 'updateEditorContent',
+                                editorId: editorId,
+                                content: savedDoc.getText()
+                            }).then(
+                                () => console.log('Message posted successfully'),
+                                (err) => console.error('Failed to post message:', err)
+                            );
+                        } else {
+                            console.error('Could not find webview panel for document:', document.uri.toString());
+                        }
+                    }
+                });
+
+                // Store the disposable for cleanup
+                this.context.subscriptions.push(disposable);
+                
+                // Show a notification
+                vscode.window.showInformationMessage('SQL editor opened. Changes will be copied back to the component editor when saved.');
+            } else {
+                // For other languages, use the standard openCodeEditor method
+                await this.openCodeEditor(
+                    content,
+                    language,
+                    filename,
+                    componentId,
+                    componentType,
+                    document,
+                    undefined // No webview panel available here
+                );
+            }
+
+        } catch (error) {
+            console.error(`Error opening ${language} editor:`, error);
+            this.vscodeApiHandler.showNotification(`Error opening ${language} editor: ${error}`, 'error');
+            throw error;
+        }
+    }
+
     private async openJsEditor(document: vscode.TextDocument): Promise<void> {
         try {
             console.log('Opening JavaScript editor for:', document.uri.fsPath);
@@ -787,7 +891,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         }
     }
 
-    private async createTempFile(document: vscode.TextDocument, type: 'html' | 'js', content: string): Promise<string> {
+    private async createTempFile(document: vscode.TextDocument, type: 'html' | 'js' | 'sql', content: string, customFilename?: string): Promise<string> {
         const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
         if (!workspaceFolder) {
             throw new Error('No workspace folder found. Please open a folder or workspace.');
@@ -807,10 +911,28 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         // Create GitIgnore entry for temp directory
         await this.ensureGitIgnoreEntry(workspaceFolder.uri.fsPath);
 
-        // Generate temp file name
-        const baseName = path.basename(document.uri.fsPath, '.vrm');
-        const tempFileName = `${baseName}.vrm.${type}`;
+        // Generate temp file name - use custom filename if provided, otherwise generate one
+        let tempFileName: string;
+        if (customFilename) {
+            // Ensure the filename has the correct extension
+            const ext = `.${type}`;
+            tempFileName = customFilename.endsWith(ext) ? customFilename : `${customFilename}${ext}`;
+        } else {
+            const baseName = path.basename(document.uri.fsPath, '.vrm');
+            tempFileName = `${baseName}.vrm.${type}`;
+        }
+        
         const tempFilePath = path.join(tempDir, tempFileName);
+        
+        // Ensure the filename is unique
+        let counter = 1;
+        let uniquePath = tempFilePath;
+        while (fs.existsSync(uniquePath)) {
+            const ext = path.extname(tempFilePath);
+            const base = tempFilePath.slice(0, -ext.length);
+            uniquePath = `${base}_${counter}${ext}`;
+            counter++;
+        }
 
         // Write content to temp file
         await fs.promises.writeFile(tempFilePath, content, 'utf8');
@@ -821,6 +943,15 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             this.tempFiles.set(documentPath, []);
         }
         this.tempFiles.get(documentPath)!.push(tempFilePath);
+        
+        // If this is a component temp file, track it separately
+        if (customFilename) {
+            const componentId = customFilename.split('_').pop(); // Extract component ID from filename
+            if (componentId) {
+                const componentKey = this.getComponentKey(documentPath, componentId);
+                this.componentTempFiles.set(componentKey, tempFilePath);
+            }
+        }
 
         console.log('Created temp file:', tempFilePath);
         return tempFilePath;
@@ -850,7 +981,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     // FIXED: Temp file watcher now uses SaveManager
-    private async setupTempFileWatcher(tempDoc: vscode.TextDocument, originalDoc: vscode.TextDocument, type: 'html' | 'js'): Promise<void> {
+    private async setupTempFileWatcher(tempDoc: vscode.TextDocument, originalDoc: vscode.TextDocument, type: 'html' | 'js' | 'sql'): Promise<void> {
         const watcher = vscode.workspace.onDidSaveTextDocument(async (savedDoc) => {
             if (savedDoc.uri.fsPath === tempDoc.uri.fsPath) {
                 // Create a status bar item for this save operation
@@ -898,27 +1029,77 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
     private async cleanupTempFiles(documentPath: string): Promise<void> {
         console.log('Cleaning up temp files for:', documentPath);
 
-        const tempFilePaths = this.tempFiles.get(documentPath);
-        if (tempFilePaths) {
-            for (const filePath of tempFilePaths) {
-                try {
-                    // Close any open editors for this temp file
-                    await this.closeTempFileEditors(filePath);
+        const tempFiles = this.tempFiles.get(documentPath) || [];
+        if (tempFiles.length === 0) return;
 
-                    // Delete the temp file
-                    await fs.promises.unlink(filePath);
-                    console.log('Cleaned up temp file:', filePath);
-
-                } catch (error) {
-                    console.warn('Error cleaning up temp file:', filePath, error);
+        console.log(`Cleaning up ${tempFiles.length} temp files for ${documentPath}`);
+        
+        // Close any open editors for these temp files first
+        await this.closeTempFileEditors(documentPath);
+        
+        // Delete the temp files
+        for (const file of tempFiles) {
+            try {
+                await fs.promises.unlink(file);
+                console.log(`Deleted temp file: ${file}`);
+                
+                // Remove from componentTempFiles if it exists there
+                for (const [key, tempFile] of this.componentTempFiles.entries()) {
+                    if (tempFile === file) {
+                        this.componentTempFiles.delete(key);
+                        break;
+                    }
                 }
+            } catch (error) {
+                console.warn(`Failed to delete temp file ${file}:`, error);
             }
-
-            this.tempFiles.delete(documentPath);
         }
+        
+        // Clean up watchers for this document
+        this.cleanupTempFileWatchers(documentPath);
+        
+        // Clear from tracking
+        this.tempFiles.delete(documentPath);
+    }
+    
+    private async cleanupComponentTempFile(documentPath: string, componentId: number | string): Promise<void> {
+        const componentKey = this.getComponentKey(documentPath, componentId);
+        const tempFilePath = this.componentTempFiles.get(componentKey);
+        
+        if (!tempFilePath) return;
+        
+        console.log(`Cleaning up temp file for component ${componentId}: ${tempFilePath}`);
+        
+        try {
+            // Close any open editors for this temp file
+            const document = await vscode.workspace.openTextDocument(tempFilePath);
+            await vscode.window.visibleTextEditors
+                .filter(editor => editor.document.uri.fsPath === tempFilePath)
+                .forEach(editor => vscode.window.showTextDocument(editor.document).then(editor => editor.hide()));
+                
+            // Delete the temp file
+            await fs.promises.unlink(tempFilePath);
+            console.log(`Deleted temp file: ${tempFilePath}`);
+            
+            // Remove from tracking
+            this.componentTempFiles.delete(componentKey);
+            
+            // Also remove from the main tempFiles map
+            const documentTempFiles = this.tempFiles.get(documentPath) || [];
+            const updatedFiles = documentTempFiles.filter(f => f !== tempFilePath);
+            if (updatedFiles.length === 0) {
+                this.tempFiles.delete(documentPath);
+            } else {
+                this.tempFiles.set(documentPath, updatedFiles);
+            }
+            
+        } catch (error) {
+            console.warn(`Failed to clean up temp file ${tempFilePath}:`, error);
+        }
+    }
 
-        // Also scan for orphaned temp files
-        await this.scanAndCleanupOrphanedTempFiles(documentPath);
+    private getComponentKey(documentPath: string, componentId: number | string): string {
+        return `${documentPath}:${componentId}`;
     }
 
     private async closeTempFileEditors(filePath: string): Promise<void> {
@@ -989,6 +1170,11 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             this.tempFileWatchers.delete(documentPath);
             console.log('Cleaned up watchers for:', documentPath);
         }
+    }
+
+    // Get the current document path
+    public getDocumentPath(): string {
+        return this.currentDocument?.uri.fsPath || '';
     }
 
     // Set up document change listener to update webview

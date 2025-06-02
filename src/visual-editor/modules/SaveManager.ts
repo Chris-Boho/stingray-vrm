@@ -3,21 +3,28 @@ import { DocumentState } from './DocumentState';
 import { ComponentXmlGenerator } from '../ComponentXmlGenerator';
 import { VrmDocument } from '../../VrmDocument';
 import { VrmComponent } from '../../types';
+import type { VrmEditorProvider } from '../../VrmEditorProvider';
 
 export class SaveManager {
   private static instance: SaveManager;
   private documentState: DocumentState;
   private xmlGenerator: ComponentXmlGenerator;
+  private vrmEditorProvider: VrmEditorProvider | null = null;
 
   private constructor() {
     this.documentState = DocumentState.getInstance();
     this.xmlGenerator = new ComponentXmlGenerator();
   }
 
-  public static getInstance(): SaveManager {
+  public static getInstance(vrmEditorProvider?: VrmEditorProvider): SaveManager {
     if (!SaveManager.instance) {
       SaveManager.instance = new SaveManager();
     }
+    
+    if (vrmEditorProvider) {
+      SaveManager.instance.vrmEditorProvider = vrmEditorProvider;
+    }
+    
     return SaveManager.instance;
   }
 
@@ -146,6 +153,30 @@ export class SaveManager {
   /**
    * Saves all dirty state to the document
    */
+  private async cleanupComponentTempFiles(componentIds: (number | string)[]): Promise<void> {
+    if (!this.vrmEditorProvider) return;
+    
+    for (const componentId of componentIds) {
+      if (componentId) {
+        try {
+          // Use type assertion to access private method
+          await (this.vrmEditorProvider as any).cleanupComponentTempFile(
+            this.vrmEditorProvider.getDocumentPath(),
+            componentId
+          );
+        } catch (error) {
+          console.error(`Error cleaning up temp files for component ${componentId}:`, error);
+        }
+      }
+    }
+  }
+
+  private getDocumentPath(): string {
+    // This is a helper method that should be called on the VrmEditorProvider instance
+    // It will be overridden by the actual implementation
+    return '';
+  }
+
   private async saveDocument(document: vscode.TextDocument): Promise<void> {
     try {
       let currentContent = document.getText();
@@ -219,6 +250,14 @@ export class SaveManager {
       // Only apply workspace edit if we have changes
       if (hasChanges) {
         await this.applyWorkspaceEdit(document, updatedContent);
+        
+        // Clean up temp files for all modified components
+        const dirtyComponents = this.documentState.getDirtyComponents();
+        const componentIds = dirtyComponents.map(c => c.n).filter(Boolean);
+        if (componentIds.length > 0) {
+          await this.cleanupComponentTempFiles(componentIds);
+        }
+        
         this.documentState.clearDirtyState();
         console.log('SaveManager: ✅ Document saved successfully');
       } else {

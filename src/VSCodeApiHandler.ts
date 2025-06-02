@@ -436,8 +436,12 @@ export class VSCodeApiHandler {
     `;
   }
 
-  public registerWebviewPanel(documentUri: string, panel: vscode.WebviewPanel): void {
-    this.webviewPanels.set(documentUri, panel);
+  public registerWebviewPanel(uri: string, panel: vscode.WebviewPanel): void {
+    this.webviewPanels.set(uri, panel);
+  }
+
+  public getWebviewPanel(uri: string): vscode.WebviewPanel | undefined {
+    return this.webviewPanels.get(uri);
   }
 
   public unregisterWebviewPanel(documentUri: string): void {
