@@ -1,25 +1,39 @@
 {
   "compilerOptions": {
-    "module": "ESNext",
-    "target": "ES2022",
-    "outDir": "out",
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "jsx": "react-jsx",
+    "target": "ES2020",
     "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
+      "ES2020"
     ],
-    "sourceMap": true,
-    "rootDir": "src",
-    "strict": true,
-    "types": ["vite/client", "node"],
-    "resolveJsonModule": true,
+    "allowJs": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "noFallthroughCasesInSwitch": true,
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": false,
+    "jsx": "react-jsx",
+    "declaration": true,
+    "outDir": "./out",
+    "rootDir": "./src",
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["webview/*"],
+      "@shared/*": ["shared/*"]
+    }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src/extension/**/*",
+    "src/shared/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "out",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
 }
