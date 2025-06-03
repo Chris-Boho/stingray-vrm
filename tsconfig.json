@@ -3,10 +3,8 @@
 		"module": "Node16",
 		"target": "ES2022",
 		"outDir": "out",
-		"jsx": "react",
 		"lib": [
-			"ES2022",
-			"dom"
+			"ES2022"
 		],
 		"sourceMap": true,
 		"rootDir": "src",
