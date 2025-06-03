@@ -29,7 +29,6 @@ The VRM Editor aims to modernize the development experience for VRM files by:
 - **React Flow**: Visual workflow canvas with built-in drag-drop and zoom/pan
 - **Monaco Editor**: VS Code's editor for code editing
 - **React DnD / dnd-kit**: Drag-and-drop for component palette
-- **Radix UI**: Accessible UI primitives
 - **React Hook Form**: Form management for component properties
 - **Immer**: Immutable state updates
 
@@ -100,9 +99,9 @@ VRM files contain three main sections in this specific order:
     </c>
   </preproc>
   
-  <html><![CDATA[
+  <html>
     <!-- HTML content with embedded JavaScript (rendered after preprocessing) -->
-  ]]></html>
+  </html>
   
   <postproc>
     <!-- Postprocessing workflow components (executed after HTML rendering) -->
