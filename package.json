@@ -3,7 +3,7 @@
 	"displayName": "stingray-vrm",
 	"publisher": "ChrisEnterprise",
 	"description": "Read and handle stingray vrm files",
-	"version": "0.5.1",
+	"version": "0.8.1",
 	"engines": {
 		"vscode": "^0.900.0"
 	},
