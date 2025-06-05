@@ -4,13 +4,13 @@
   "description": "handle and edit vrm files",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.100.0"
+    "vscode": "^1.01.0"
   },
   "categories": [
     "Other"
   ],
   "activationEvents": [],
-  "main": "./out/extension.js",
+  "main": "./out/extension/extension.js",
   "contributes": {
     "customEditors": [
       {
@@ -40,19 +40,21 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src",
-    "test": "vscode-test"
+    "dev": "concurrently \"npm run watch:extension\" \"npm run dev:webview\"",
+    "watch:extension": "tsc -watch -p ./",
+    "dev:webview": "vite",
+    "build": "npm run build:extension && npm run build:webview",
+    "build:extension": "tsc -p ./",
+    "build:webview": "vite build",
+    "package": "vsce package",
+    "test": "vitest"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "20.x",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
-    "@types/vscode": "^1.100.0",
+    "@types/vscode": "^1.01.0",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "@vitejs/plugin-react": "^4.5.0",

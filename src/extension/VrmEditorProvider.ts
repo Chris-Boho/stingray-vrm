@@ -20,6 +20,8 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         webviewPanel: vscode.WebviewPanel,
         _token: vscode.CancellationToken
     ): Promise<void> {
+        console.log('VRM Editor: Resolving custom text editor for:', document.uri.toString());
+        
         // Setup initial webview options
         webviewPanel.webview.options = {
             enableScripts: true,
@@ -28,6 +30,7 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
         // Set the HTML content for the webview
         webviewPanel.webview.html = this.getHtmlForWebview(webviewPanel.webview);
+        console.log('VRM Editor: HTML content set for webview');
 
         // Update webview when document changes
         const changeDocumentSubscription = vscode.workspace.onDidChangeTextDocument(e => {
@@ -38,7 +41,10 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
 
         // Handle messages from the webview
         webviewPanel.webview.onDidReceiveMessage(
-            message => this.handleWebviewMessage(document, message),
+            message => {
+                console.log('VRM Editor: Received message from webview:', message);
+                this.handleWebviewMessage(document, message);
+            },
             undefined,
             this.context.subscriptions
         );
@@ -49,15 +55,15 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         });
 
         // Send initial document content to webview
+        console.log('VRM Editor: Sending initial content to webview');
         this.updateWebview(webviewPanel.webview, document);
     }
 
     private getHtmlForWebview(webview: vscode.Webview): string {
-        // Get the local path to main script run in the webview
-        const scriptPathOnDisk = vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'assets');
-        
-        // Convert to webview URI
-        const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
+        // Get the webview build directory (now in out/webview)
+        const webviewUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview')
+        );
         
         // Use a nonce for security
         const nonce = this.getNonce();
@@ -67,8 +73,9 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} https: data:;">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' 'unsafe-inline'; img-src ${webview.cspSource} https: data:;">
                 <title>VRM Editor</title>
+                <link rel="stylesheet" href="${webviewUri}/main.css">
                 
                 <style>
                     html, body, #root {
@@ -85,18 +92,24 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                 </style>
             </head>
             <body>
-                <div id="root"></div>
-                <script nonce="${nonce}" src="${scriptUri}/main.js"></script>
+                <div id="root">Loading VRM Editor...</div>
+                <script nonce="${nonce}">
+                    console.log('VRM Editor webview script loading...');
+                    console.log('Base URI:', '${webviewUri}');
+                </script>
+                <script nonce="${nonce}" src="${webviewUri}/main.js"></script>
             </body>
             </html>`;
     }
 
     private updateWebview(webview: vscode.Webview, document: vscode.TextDocument): void {
-        webview.postMessage({
+        const message = {
             type: 'update',
             content: document.getText(),
             uri: document.uri.toString()
-        });
+        };
+        console.log('VRM Editor: Posting message to webview:', message);
+        webview.postMessage(message);
     }
 
     private handleWebviewMessage(document: vscode.TextDocument, message: any): void {

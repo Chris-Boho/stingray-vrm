@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { VrmEditorProvider } from './extension/VrmEditorProvider';
+import { VrmEditorProvider } from './VrmEditorProvider';
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('VRM Editor extension is now active');
