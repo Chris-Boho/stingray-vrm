@@ -627,20 +627,38 @@ export class VrmParserService {
   public validateDocument(document: VrmDocument): string[] {
     const errors: string[] = [];
 
-    // Check for duplicate component IDs
-    const allComponents = [...document.preproc, ...document.postproc];
-    const componentIds = allComponents.map(c => c.n);
-    const duplicateIds = componentIds.filter((id, index) => componentIds.indexOf(id) !== index);
+    // Check for duplicate component IDs within each section separately
+    // Preproc and postproc can have overlapping IDs - that's normal
     
-    if (duplicateIds.length > 0) {
-      errors.push(`Duplicate component IDs found: ${duplicateIds.join(', ')}`);
+    // Check preproc section for duplicates
+    const preprocIds = document.preproc.map(c => c.n);
+    const preprocDuplicates = preprocIds.filter((id, index) => preprocIds.indexOf(id) !== index);
+    if (preprocDuplicates.length > 0) {
+      const uniqueDuplicates = [...new Set(preprocDuplicates)];
+      errors.push(`Duplicate component IDs in preproc section: ${uniqueDuplicates.join(', ')}`);
     }
 
-    // Validate component connections
-    allComponents.forEach(component => {
+    // Check postproc section for duplicates
+    const postprocIds = document.postproc.map(c => c.n);
+    const postprocDuplicates = postprocIds.filter((id, index) => postprocIds.indexOf(id) !== index);
+    if (postprocDuplicates.length > 0) {
+      const uniqueDuplicates = [...new Set(postprocDuplicates)];
+      errors.push(`Duplicate component IDs in postproc section: ${uniqueDuplicates.join(', ')}`);
+    }
+
+    // Validate component connections within their respective sections
+    document.preproc.forEach(component => {
       component.j.forEach((targetId, index) => {
-        if (targetId > 0 && !componentIds.includes(targetId)) {
-          errors.push(`Component ${component.n} has invalid connection to non-existent component ${targetId}`);
+        if (targetId > 0 && !preprocIds.includes(targetId)) {
+          errors.push(`Preproc component ${component.n} has invalid connection to non-existent component ${targetId}`);
+        }
+      });
+    });
+
+    document.postproc.forEach(component => {
+      component.j.forEach((targetId, index) => {
+        if (targetId > 0 && !postprocIds.includes(targetId)) {
+          errors.push(`Postproc component ${component.n} has invalid connection to non-existent component ${targetId}`);
         }
       });
     });
