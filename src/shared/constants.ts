@@ -8,8 +8,8 @@ export const VRM_FILE_PATTERN = '**/*.vrm';
 
 // Grid system constants (from README: 32x26px grid)
 export const GRID_SIZE = {
-  X: 32,
-  Y: 26
+  x: 32,
+  y: 26
 } as const;
 
 // Component types as defined in the README

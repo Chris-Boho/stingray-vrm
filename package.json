@@ -41,13 +41,11 @@
   },
   "scripts": {
     "dev": "concurrently \"npm run watch:extension\" \"npm run dev:webview\"",
-    "watch:extension": "tsc -watch -p ./",
     "dev:webview": "vite",
+    "watch:extension": "tsc -p . --watch",
     "build": "npm run build:extension && npm run build:webview",
-    "build:extension": "tsc -p ./",
-    "build:webview": "vite build",
-    "package": "vsce package",
-    "test": "vitest"
+    "build:extension": "tsc -p .",
+    "build:webview": "vite build"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -55,12 +53,14 @@
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.5",
     "@types/vscode": "^1.01.0",
+    "@types/vscode-webview": "^1.57.5",
     "@typescript-eslint/eslint-plugin": "^8.31.1",
     "@typescript-eslint/parser": "^8.31.1",
     "@vitejs/plugin-react": "^4.5.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.5.2",
     "autoprefixer": "^10.4.21",
+    "concurrently": "^9.1.2",
     "eslint": "^9.25.1",
     "postcss": "^8.5.4",
     "tailwindcss": "^4.1.8",
@@ -69,7 +69,9 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.8",
+    "immer": "^10.1.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.5"
   }
 }

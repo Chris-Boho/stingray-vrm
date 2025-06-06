@@ -34,6 +34,8 @@
     "node_modules",
     "out",
     "**/*.test.ts",
-    "**/*.test.tsx"
+    "**/*.test.tsx",
+    ".vscode-test",
+    "src/webview/**/*"
   ]
 }
