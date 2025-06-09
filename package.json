@@ -69,6 +69,7 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.8",
+    "@xyflow/react": "^12.6.4",
     "immer": "^10.1.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

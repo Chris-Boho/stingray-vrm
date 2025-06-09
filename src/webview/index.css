@@ -21,9 +21,18 @@ html, body, #root {
   width: 100%;
   margin: 0;
   padding: 0;
-  overflow: hidden;
+  /* Remove overflow: hidden - let content flow naturally */
 }
 
+/* Apply overflow hidden only where needed for specific components */
+.workflow-canvas-container {
+  overflow: hidden; /* Only hide overflow in the canvas area */
+}
+
+/* Ensure proper scrolling for text content areas */
+.text-content {
+  overflow: auto;
+}
 body {
   font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
   font-size: var(--vscode-font-size, 13px);

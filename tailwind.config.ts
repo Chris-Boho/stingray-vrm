@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+    important: true,
     content: [
       "./src/webview/**/*.{js,ts,jsx,tsx}",
       "./src/webview/index.html",
