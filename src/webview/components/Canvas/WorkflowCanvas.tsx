@@ -215,7 +215,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             color={grid.showGrid ? 'var(--vscode-panel-border)' : 'transparent'}
           />
           <Controls
-            position="top-left"
+            position="top-right"
             showZoom={true}
             showFitView={true}
             showInteractive={true}
