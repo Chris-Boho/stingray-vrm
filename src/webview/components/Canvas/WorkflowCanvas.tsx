@@ -50,7 +50,7 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
   const edges: Edge[] = [];
   
   components.forEach(component => {
-    // Primary connection (first j element)
+    // Primary connection (first j element) - Light blue
     if (component.j[0] && component.j[0] > 0) {
       edges.push({
         id: `${component.n}-primary-${component.j[0]}`,
@@ -58,12 +58,12 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
         target: component.j[0].toString(),
         type: 'smoothstep',
         sourceHandle: 'primary',
-        style: { stroke: '#888', strokeWidth: 2 },
+        style: { stroke: '#60a5fa', strokeWidth: 2 }, // Light blue
         data: { connectionType: 'primary' }
       });
     }
     
-    // Secondary connection (second j element)
+    // Secondary connection (second j element) - Grey
     if (component.j[1] && component.j[1] > 0) {
       edges.push({
         id: `${component.n}-secondary-${component.j[1]}`,
@@ -71,7 +71,7 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
         target: component.j[1].toString(),
         type: 'smoothstep',
         sourceHandle: 'secondary',
-        style: { stroke: '#ff6b6b', strokeWidth: 2 },
+        style: { stroke: '#9ca3af', strokeWidth: 2 }, // Grey
         data: { connectionType: 'secondary' }
       });
     }
