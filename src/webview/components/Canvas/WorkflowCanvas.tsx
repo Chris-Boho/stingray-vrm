@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   Node,
@@ -84,6 +84,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   section, 
   className = '' 
 }) => {
+  // ✅ ALL HOOKS FIRST - before any conditional logic or early returns
   const { document } = useDocumentStore();
   const { zoom, setZoom, pan, setPan, grid } = useEditorStore();
   const { selectedComponents, selectComponents, clearSelection } = useSelectionStore();
@@ -104,22 +105,11 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     return convertConnectionsToEdges(sectionComponents);
   }, [sectionComponents]);
 
+  // ✅ Initialize ReactFlow state hooks
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Update nodes when components change
-  React.useEffect(() => {
-    const newNodes = sectionComponents.map(convertVrmComponentToNode);
-    setNodes(newNodes);
-  }, [sectionComponents, setNodes]);
-
-  // Update edges when components change
-  React.useEffect(() => {
-    const newEdges = convertConnectionsToEdges(sectionComponents);
-    setEdges(newEdges);
-  }, [sectionComponents, setEdges]);
-
-  // Handle new connections
+  // ✅ All callback hooks
   const onConnect = useCallback(
     (params: Connection) => {
       setEdges((eds) => addEdge(params, eds));
@@ -128,23 +118,32 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     [setEdges]
   );
 
-  // Handle node selection
   const onSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     const selectedNodeIds = params.nodes.map(node => parseInt(node.id));
     selectComponents(selectedNodeIds);
   }, [selectComponents]);
 
-  // Handle canvas click (clear selection)
   const onPaneClick = useCallback(() => {
     clearSelection();
   }, [clearSelection]);
 
-  // Handle zoom changes
   const onViewportChange = useCallback((viewport: { x: number; y: number; zoom: number }) => {
     setZoom(viewport.zoom);
     setPan({ x: viewport.x, y: viewport.y });
   }, [setZoom, setPan]);
 
+  // ✅ All effect hooks
+  useEffect(() => {
+    const newNodes = sectionComponents.map(convertVrmComponentToNode);
+    setNodes(newNodes);
+  }, [sectionComponents, setNodes]);
+
+  useEffect(() => {
+    const newEdges = convertConnectionsToEdges(sectionComponents);
+    setEdges(newEdges);
+  }, [sectionComponents, setEdges]);
+
+  // ✅ NOW handle conditional rendering - after all hooks are declared
   if (!document) {
     return (
       <div className={`flex items-center justify-center h-full ${className}`}>
@@ -164,9 +163,6 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     );
   }
 
-  console.log('Rendering ReactFlow with:', { nodes: nodes.length, edges: edges.length });
-  console.log('First node example:', nodes[0]);
-  console.log('Node types:', nodeTypes);
 
   return (
     <div className={`w-full relative ${className}`}>

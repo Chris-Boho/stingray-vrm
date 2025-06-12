@@ -3,6 +3,7 @@ import { immer } from 'zustand/middleware/immer';
 import { VrmComponent, ComponentTemplate, ComponentType, SectionType } from '../types/vrm';
 import { COMPONENT_TYPES, COMPONENT_CATEGORIES, COMPONENT_CATEGORY_MAP, GRID_SIZE } from '../../shared/constants';
 import { useDocumentStore } from './documentStore';
+import { useMemo } from 'react';
 
 interface ComponentStoreState {
   // Component templates for palette
@@ -295,18 +296,22 @@ export const useComponentStore = create<ComponentStoreState>()(
 
 // Selectors for commonly used values
 export const useComponentTemplates = () => useComponentStore(state => state.templates);
-export const useComponentTemplatesByCategory = () => useComponentStore(state => {
-  const grouped: Record<string, ComponentTemplate[]> = {};
+export const useComponentTemplatesByCategory = () => {
+  const templates = useComponentStore(state => state.templates);
   
-  state.templates.forEach(template => {
-    if (!grouped[template.category]) {
-      grouped[template.category] = [];
-    }
-    grouped[template.category].push(template);
-  });
-  
-  return grouped;
-});
+  return useMemo(() => {
+    const grouped: Record<string, ComponentTemplate[]> = {};
+    
+    templates.forEach(template => {
+      if (!grouped[template.category]) {
+        grouped[template.category] = [];
+      }
+      grouped[template.category].push(template);
+    });
+    
+    return grouped;
+  }, [templates]); // Only recreate when templates array reference changes
+};
 
 export const useDraggedTemplate = () => useComponentStore(state => state.draggedTemplate);
 export const useIsDragging = () => useComponentStore(state => state.isDragging);

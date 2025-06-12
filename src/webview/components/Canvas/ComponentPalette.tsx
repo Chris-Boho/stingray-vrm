@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useDraggable } from '@dnd-kit/core';
 import { ComponentTemplate } from '../../types/vrm';
-import { useComponentTemplatesByCategory, useComponentStore } from '../../stores/componentStore';
+import { useComponentStore } from '../../stores/componentStore';
+import { useDnD } from './DndProvider';
 
 // Icon components for different component types
 const ComponentIcon: React.FC<{ icon: string; className?: string }> = ({ icon, className = "w-4 h-4" }) => {
@@ -69,70 +69,61 @@ const ComponentIcon: React.FC<{ icon: string; className?: string }> = ({ icon, c
   return iconMap[icon as keyof typeof iconMap] || iconMap.code;
 };
 
-// Draggable component item
+// Simple HTML5 drag and drop component item - following React Flow pattern
 const DraggableComponentItem: React.FC<{ template: ComponentTemplate }> = ({ template }) => {
-  const { setDraggedTemplate, setIsDragging } = useComponentStore();
-  
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    isDragging
-  } = useDraggable({
-    id: `template-${template.type}`,
-    data: {
-      template,
-      type: 'component-template'
-    }
-  });
+  const [isDragging, setIsDragging] = useState(false);
+  const [_, setDraggedTemplate] = useDnD();
 
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : undefined;
+  const onDragStart = (event: React.DragEvent) => {
+    console.log('Drag start:', template.type);
+    setIsDragging(true);
+    setDraggedTemplate(template);
+    
+    // Store the template data in the drag event (following React Flow pattern)
+    event.dataTransfer.setData('application/json', JSON.stringify(template));
+    event.dataTransfer.effectAllowed = 'move';
+  };
 
-  React.useEffect(() => {
-    if (isDragging) {
-      setDraggedTemplate(template);
-      setIsDragging(true);
-    } else {
-      setDraggedTemplate(null);
-      setIsDragging(false);
-    }
-  }, [isDragging, template, setDraggedTemplate, setIsDragging]);
+  const onDragEnd = () => {
+    console.log('Drag end:', template.type);
+    setIsDragging(false);
+    setDraggedTemplate(null);
+  };
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
       className={`
-        group p-3 bg-vscode-input-bg border border-vscode-border rounded-md cursor-grab
+        group p-2 bg-vscode-input-bg border border-vscode-border rounded cursor-grab
         hover:bg-vscode-list-hoverBackground hover:border-vscode-list-focusBorder
-        active:cursor-grabbing transition-all duration-150
+        transition-all duration-150 select-none
         ${isDragging ? 'opacity-50 scale-95' : 'opacity-100 scale-100'}
       `}
       title={template.description}
+      style={{
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        MozUserSelect: 'none',
+        msUserSelect: 'none'
+      }}
     >
-      <div className="flex items-start space-x-3">
+      <div className="flex items-center space-x-2">
         {/* Component Icon */}
-        <div className="flex-shrink-0 p-2 bg-vscode-button-background border border-vscode-button-border rounded">
+        <div className="flex-shrink-0 p-1 bg-vscode-button-background border border-vscode-button-border rounded">
           <ComponentIcon 
             icon={template.icon} 
-            className="w-4 h-4 text-vscode-button-foreground"
+            className="w-3 h-3 text-vscode-button-foreground"
           />
         </div>
         
         {/* Component Info */}
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-medium text-vscode-foreground truncate">
+        <div className="flex-1 min-w-0 pointer-events-none">
+          <div className="text-xs font-medium text-vscode-foreground truncate">
             {template.label}
           </div>
-          <div className="text-xs text-vscode-secondary mt-1 leading-relaxed">
-            {template.description}
-          </div>
-          <div className="text-xs text-vscode-badge-foreground bg-vscode-badge-background px-2 py-0.5 rounded mt-2 inline-block">
+          <div className="text-xs text-vscode-badge-foreground bg-vscode-badge-background px-1 py-0.5 rounded mt-1 inline-block">
             {template.type}
           </div>
         </div>
@@ -219,27 +210,7 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   isCollapsed = false,
   onToggleCollapse
 }) => {
-  const templatesByCategory = useComponentTemplatesByCategory();
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    new Set(['database', 'script', 'control']) // Default expanded categories
-  );
-
-  const toggleCategory = (category: string) => {
-    setExpandedCategories(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(category)) {
-        newSet.delete(category);
-      } else {
-        newSet.add(category);
-      }
-      return newSet;
-    });
-  };
-
-  const totalComponents = Object.values(templatesByCategory).reduce(
-    (total, templates) => total + templates.length, 
-    0
-  );
+  const templates = useComponentStore(state => state.templates); // Direct access to templates
 
   if (isCollapsed) {
     return (
@@ -255,20 +226,19 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({
           </button>
         </div>
         
-        {/* Collapsed Category Icons */}
+        {/* Collapsed Component Icons */}
         <div className="flex-1 py-2 space-y-2">
-          {Object.entries(templatesByCategory).map(([category, templates]) => (
-            <div key={category} className="px-2">
+          {templates.map((template) => (
+            <div key={template.type} className="px-2">
               <button
                 className="w-full p-2 rounded hover:bg-vscode-list-hoverBackground"
-                title={`${category} (${templates.length})`}
+                title={`${template.label} - ${template.description}`}
                 onClick={() => {
                   onToggleCollapse?.();
-                  toggleCategory(category);
                 }}
               >
                 <ComponentIcon 
-                  icon={templates[0]?.icon || 'code'} 
+                  icon={template.icon} 
                   className="w-4 h-4 text-vscode-foreground mx-auto" 
                 />
               </button>
@@ -280,65 +250,44 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   }
 
   return (
-    <div className="w-80 bg-vscode-sideBar-background border-r border-vscode-border flex flex-col">
+    <div className="w-64 bg-vscode-sideBar-background border-r border-vscode-border flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-vscode-border">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-vscode-foreground">Component Palette</h2>
+      <div className="p-3 border-b border-vscode-border">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-vscode-foreground">Components</h2>
           {onToggleCollapse && (
             <button
               onClick={onToggleCollapse}
               className="p-1 rounded hover:bg-vscode-list-hoverBackground"
               title="Collapse Palette"
             >
-              <svg className="w-4 h-4 text-vscode-secondary" fill="currentColor" viewBox="0 0 20 20">
+              <svg className="w-3 h-3 text-vscode-secondary" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"/>
               </svg>
             </button>
           )}
         </div>
-        <p className="text-xs text-vscode-secondary">
-          Drag components to the canvas to add them to your workflow
-        </p>
-        <div className="text-xs text-vscode-badge-foreground bg-vscode-badge-background px-2 py-1 rounded mt-2 inline-block">
-          {totalComponents} Components Available
+        <div className="text-xs text-vscode-badge-foreground bg-vscode-badge-background px-2 py-0.5 rounded mt-1 inline-block">
+          {templates.length} Available
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="p-4 border-b border-vscode-border">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search components..."
-            className="w-full px-3 py-2 pl-8 text-sm bg-vscode-input-background border border-vscode-input-border 
-                       rounded text-vscode-input-foreground placeholder-vscode-input-placeholderForeground
-                       focus:outline-none focus:border-vscode-focusBorder"
-          />
-          <ComponentIcon 
-            icon="search" 
-            className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-vscode-input-placeholderForeground" 
-          />
+      {/* Component List - Compact Layout */}
+      <div className="flex-1 overflow-y-auto p-2">
+        <div className="space-y-1">
+          {templates.map((template) => (
+            <DraggableComponentItem 
+              key={template.type}
+              template={template}
+            />
+          ))}
         </div>
-      </div>
-
-      {/* Component Categories */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {Object.entries(templatesByCategory).map(([category, templates]) => (
-          <CategorySection
-            key={category}
-            category={category}
-            templates={templates}
-            isExpanded={expandedCategories.has(category)}
-            onToggle={() => toggleCategory(category)}
-          />
-        ))}
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-vscode-border">
+      <div className="p-2 border-t border-vscode-border">
         <div className="text-xs text-vscode-secondary text-center">
-          Drag & Drop • Double-click to insert
+          Drag & Drop
         </div>
       </div>
     </div>
