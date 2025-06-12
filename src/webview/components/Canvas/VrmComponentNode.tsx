@@ -15,50 +15,96 @@ type VrmComponentNodeProps = NodeProps & {
   data: VrmComponentNodeData;
 };
 
-// Component type to color mapping with modern, accessible colors
+// Component type to color mapping - Each component type has a unique, meaningful color
 const getComponentColor = (type: ComponentType): { bg: string; border: string; text: string; shadow: string } => {
   switch (type) {
+    // Database Components - Blue family
     case 'SQLTRN':
-    case 'SELECTQUERY':
-    case 'INSERTUPDATEQUERY':
       return {
-        bg: 'bg-gradient-to-r from-blue-500 to-blue-600',
-        border: 'border-blue-300',
+        bg: 'bg-gradient-to-r from-blue-600 to-blue-700',
+        border: 'border-blue-400',
         text: 'text-white',
         shadow: 'shadow-blue-500/20'
       };
+    case 'SELECTQUERY':
+      return {
+        bg: 'bg-gradient-to-r from-sky-500 to-sky-600',
+        border: 'border-sky-300',
+        text: 'text-white',
+        shadow: 'shadow-sky-500/20'
+      };
+    case 'INSERTUPDATEQUERY':
+      return {
+        bg: 'bg-gradient-to-r from-cyan-500 to-cyan-600',
+        border: 'border-cyan-300',
+        text: 'text-white',
+        shadow: 'shadow-cyan-500/20'
+      };
+    
+    // Script Components - Green family
     case 'CSF':
-    case 'SCRIPT':
       return {
         bg: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
         border: 'border-emerald-300',
         text: 'text-white',
         shadow: 'shadow-emerald-500/20'
       };
+    case 'SCRIPT':
+      return {
+        bg: 'bg-gradient-to-r from-green-500 to-green-600',
+        border: 'border-green-300',
+        text: 'text-white',
+        shadow: 'shadow-green-500/20'
+      };
+    
+    // Control Flow Components - Distinct colors
     case 'IF':
-    case 'ERROR':
       return {
         bg: 'bg-gradient-to-r from-amber-500 to-amber-600',
         border: 'border-amber-300',
         text: 'text-white',
         shadow: 'shadow-amber-500/20'
       };
+    case 'ERROR':
+      return {
+        bg: 'bg-gradient-to-r from-red-500 to-red-600',
+        border: 'border-red-300',
+        text: 'text-white',
+        shadow: 'shadow-red-500/20'
+      };
+    
+    // Data Components - Purple family
     case 'SET':
-    case 'MATH':
       return {
         bg: 'bg-gradient-to-r from-purple-500 to-purple-600',
         border: 'border-purple-300',
         text: 'text-white',
         shadow: 'shadow-purple-500/20'
       };
+    case 'MATH':
+      return {
+        bg: 'bg-gradient-to-r from-violet-500 to-violet-600',
+        border: 'border-violet-300',
+        text: 'text-white',
+        shadow: 'shadow-violet-500/20'
+      };
+    
+    // Integration Components - Distinct colors
     case 'EXTERNAL':
-    case 'TEMPLATE':
       return {
         bg: 'bg-gradient-to-r from-indigo-500 to-indigo-600',
         border: 'border-indigo-300',
         text: 'text-white',
         shadow: 'shadow-indigo-500/20'
       };
+    case 'TEMPLATE':
+      return {
+        bg: 'bg-gradient-to-r from-pink-500 to-pink-600',
+        border: 'border-pink-300',
+        text: 'text-white',
+        shadow: 'shadow-pink-500/20'
+      };
+    
     default:
       return {
         bg: 'bg-gradient-to-r from-gray-500 to-gray-600',
@@ -127,7 +173,7 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
       {/* Main Component Container - 128px × 32px */}
       <div
         className={`
-          w-32 h-8 flex items-center rounded-md border-2 cursor-pointer
+          w-48 h-8 flex items-center rounded-md border-2 cursor-pointer
           transition-all duration-200 ease-in-out
           ${colors.bg} ${colors.border} ${colors.text} ${colors.shadow}
           hover:scale-105 hover:shadow-lg hover:shadow-current/30
