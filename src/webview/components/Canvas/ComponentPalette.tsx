@@ -92,111 +92,28 @@ const DraggableComponentItem: React.FC<{ template: ComponentTemplate }> = ({ tem
 
   return (
     <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      className={`
-        group p-2 bg-vscode-input-bg border border-vscode-border rounded cursor-grab
-        hover:bg-vscode-list-hoverBackground hover:border-vscode-list-focusBorder
-        transition-all duration-150 select-none
-        ${isDragging ? 'opacity-50 scale-95' : 'opacity-100 scale-100'}
-      `}
-      title={template.description}
-      style={{
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        MozUserSelect: 'none',
-        msUserSelect: 'none'
-      }}
-    >
-      <div className="flex items-center space-x-2">
-        {/* Component Icon */}
-        <div className="flex-shrink-0 p-1 bg-vscode-button-background border border-vscode-button-border rounded">
-          <ComponentIcon 
-            icon={template.icon} 
-            className="w-3 h-3 text-vscode-button-foreground"
-          />
-        </div>
-        
-        {/* Component Info */}
-        <div className="flex-1 min-w-0 pointer-events-none">
-          <div className="text-xs font-medium text-vscode-foreground truncate">
-            {template.label}
-          </div>
-          <div className="text-xs text-vscode-badge-foreground bg-vscode-badge-background px-1 py-0.5 rounded mt-1 inline-block">
-            {template.type}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Category section component
-const CategorySection: React.FC<{ 
-  category: string; 
-  templates: ComponentTemplate[];
-  isExpanded: boolean;
-  onToggle: () => void;
-}> = ({ category, templates, isExpanded, onToggle }) => {
-  const categoryLabels = {
-    database: 'Database',
-    script: 'Script',
-    control: 'Control Flow',
-    data: 'Data',
-    integration: 'Integration'
-  };
-
-  const categoryColors = {
-    database: 'text-blue-400',
-    script: 'text-green-400',
-    control: 'text-amber-400',
-    data: 'text-purple-400',
-    integration: 'text-pink-400'
-  };
-
-  return (
-    <div className="mb-4">
-      {/* Category Header */}
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between p-2 bg-vscode-sideBar-background 
-                   border border-vscode-border rounded-md hover:bg-vscode-list-hoverBackground
-                   transition-colors duration-150"
-      >
-        <div className="flex items-center space-x-2">
-          <span className={`text-sm font-semibold ${categoryColors[category as keyof typeof categoryColors] || 'text-vscode-foreground'}`}>
-            {categoryLabels[category as keyof typeof categoryLabels] || category}
-          </span>
-          <span className="text-xs text-vscode-secondary bg-vscode-badge-background px-2 py-0.5 rounded">
-            {templates.length}
-          </span>
-        </div>
-        
-        {/* Expand/Collapse Icon */}
-        <svg 
-          className={`w-4 h-4 text-vscode-secondary transition-transform duration-200 ${
-            isExpanded ? 'rotate-90' : 'rotate-0'
-          }`}
-          fill="currentColor" 
-          viewBox="0 0 20 20"
-        >
-          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"/>
-        </svg>
-      </button>
-      
-      {/* Category Items */}
-      {isExpanded && (
-        <div className="mt-2 space-y-2">
-          {templates.map((template) => (
-            <DraggableComponentItem 
-              key={template.type}
-              template={template}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+    draggable
+    onDragStart={onDragStart}
+    onDragEnd={onDragEnd}
+    className={`
+      w-10 h-10 bg-vscode-input-bg border border-vscode-border rounded cursor-grab
+      hover:bg-vscode-list-hoverBackground hover:border-vscode-list-focusBorder
+      transition-all duration-150 select-none flex items-center justify-center
+      ${isDragging ? 'opacity-50 scale-90' : 'opacity-100 scale-100'}
+    `}
+    title={`${template.label} - ${template.description}`}  // Enhanced tooltip
+    style={{
+      userSelect: 'none',
+      WebkitUserSelect: 'none',
+      MozUserSelect: 'none',
+      msUserSelect: 'none'
+    }}
+  >
+    <ComponentIcon 
+      icon={template.icon} 
+      className="w-5 h-5 text-vscode-foreground"  // Larger icon
+    />
+  </div>
   );
 };
 
@@ -250,39 +167,23 @@ export const ComponentPalette: React.FC<ComponentPaletteProps> = ({
   }
 
   return (
-    <div className="w-64 bg-vscode-sideBar-background border-r border-vscode-border flex flex-col">
-      {/* Header */}
-      <div className="p-3 border-b border-vscode-border">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-vscode-foreground">Components</h2>
-          {onToggleCollapse && (
-            <button
-              onClick={onToggleCollapse}
-              className="p-1 rounded hover:bg-vscode-list-hoverBackground"
-              title="Collapse Palette"
-            >
-              <svg className="w-3 h-3 text-vscode-secondary" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd"/>
-              </svg>
-            </button>
-          )}
-        </div>
-        <div className="text-xs text-vscode-badge-foreground bg-vscode-badge-background px-2 py-0.5 rounded mt-1 inline-block">
-          {templates.length} Available
-        </div>
-      </div>
+    <div className="w-32 bg-vscode-sideBar-background border-r border-vscode-border flex flex-col">
+    {/* Header - simplified */}
+    <div className="p-2 border-b border-vscode-border">  
+      {/* Removed the "Available" badge */}
+    </div>
 
-      {/* Component List - Compact Layout */}
-      <div className="flex-1 overflow-y-auto p-2">
-        <div className="space-y-1">
-          {templates.map((template) => (
-            <DraggableComponentItem 
-              key={template.type}
-              template={template}
-            />
-          ))}
-        </div>
+    {/* Component grid layout */}
+    <div className="flex-1 overflow-y-auto p-2">
+      <div className="grid grid-cols-1 gap-1 place-items-center">
+        {templates.map((template) => (
+          <DraggableComponentItem 
+            key={template.type}
+            template={template}
+          />
+        ))}
       </div>
+    </div>
 
       {/* Footer */}
       <div className="p-2 border-t border-vscode-border">

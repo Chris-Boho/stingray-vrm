@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useEffect } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Node,
@@ -12,14 +12,15 @@ import {
   Background,
   BackgroundVariant,
   Panel,
+  useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
-import '../../../../tailwind.config.ts';
 
 import { useDocumentStore } from '../../stores/documentStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useSelectionStore } from '../../stores/selectionStore';
-import { VrmComponent, SectionType } from '../../types/vrm';
+import { useComponentStore } from '../../stores/componentStore';
+import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
 
 interface WorkflowCanvasProps {
@@ -88,6 +89,13 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const { document } = useDocumentStore();
   const { zoom, setZoom, pan, setPan, grid } = useEditorStore();
   const { selectedComponents, selectComponents, clearSelection } = useSelectionStore();
+  const { createComponent } = useComponentStore();
+  
+  // Use React Flow instance for coordinate conversion
+  const reactFlowInstance = useReactFlow();
+  
+  // State for drag over effect
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Get components for the current section
   const sectionComponents = useMemo(() => {
@@ -132,6 +140,68 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     setPan({ x: viewport.x, y: viewport.y });
   }, [setZoom, setPan]);
 
+  // Drop handling
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    setIsDragOver(true);
+    console.log('Drag over canvas');
+  }, []);
+
+  const onDragLeave = useCallback(() => {
+    setIsDragOver(false);
+  }, []);
+
+  const onDrop = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    setIsDragOver(false);
+    
+    console.log('Drop event on ReactFlow canvas');
+    
+    // Get the template data from the drag event
+    const templateData = event.dataTransfer.getData('application/json');
+    
+    if (!templateData) {
+      console.log('No template data in drop event');
+      return;
+    }
+    
+    try {
+      const template: ComponentTemplate = JSON.parse(templateData);
+      console.log('Template data:', template);
+      
+      // Calculate the position where the component was dropped
+      // Convert screen coordinates to flow coordinates
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      
+      // Adjust for component size (center the component on the drop point)
+      // Component is now 32px × 32px (w-8 = 2rem = 32px)
+      const adjustedPosition = {
+        x: position.x - 16, // Half of component width (32/2)
+        y: position.y - 16, // Half of component height (32/2)
+      };
+      
+      console.log('Drop coordinates:', { 
+        client: { x: event.clientX, y: event.clientY },
+        flow: position,
+        adjusted: adjustedPosition 
+      });
+      
+      // Create the new component with adjusted position
+      const newComponent = createComponent(template.type, adjustedPosition, section);
+      console.log('Created component:', newComponent);
+      
+      // The component store should have already added it to the document
+      // React will re-render and update our nodes
+      
+    } catch (error) {
+      console.error('Error processing drop:', error);
+    }
+  }, [createComponent, section, reactFlowInstance]);
+
   // ✅ All effect hooks
   useEffect(() => {
     const newNodes = sectionComponents.map(convertVrmComponentToNode);
@@ -152,17 +222,21 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     );
   }
 
-  if (sectionComponents.length === 0) {
+  if (sectionComponents.length === 0 && !isDragOver) {
     return (
-      <div className={`flex items-center justify-center h-full ${className}`}>
+      <div 
+        className={`flex items-center justify-center h-full ${className}`}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
         <div className="text-center space-y-2">
           <div className="text-vscode-foreground">No components in {section} section</div>
-          <div className="text-sm text-vscode-secondary">Add components to see the workflow</div>
+          <div className="text-sm text-vscode-secondary">Drag components from the palette to add them</div>
         </div>
       </div>
     );
   }
-
 
   return (
     <div className={`w-full relative ${className}`}>
@@ -170,7 +244,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
       <div 
         className="w-full h-full" 
         style={{ 
-          overflow: 'visible'
+          overflow: 'visible',
+          position: 'relative'
         }}
       >
         <ReactFlow
@@ -183,6 +258,9 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           onSelectionChange={onSelectionChange}
           onPaneClick={onPaneClick}
           onViewportChange={onViewportChange}
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
           defaultViewport={{ x: pan.x, y: pan.y, zoom }}
           selectNodesOnDrag={false}
           selectionOnDrag={true}
@@ -202,7 +280,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             [0, 0],
             [2000, 1000]
           ]}
-          style={{ width: '100%', height: '600px' }}
+          style={{ 
+            width: '100%', 
+            height: '600px',
+            backgroundColor: isDragOver ? 'rgba(96, 165, 250, 0.1)' : undefined,
+            transition: 'background-color 0.2s'
+          }}
         >
           <Background
             variant={BackgroundVariant.Dots}
@@ -235,6 +318,18 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
               {section.charAt(0).toUpperCase() + section.slice(1)} Section - {sectionComponents.length} Components
             </div>
           </Panel>
+          
+          {/* Drop indicator */}
+          {isDragOver && (
+            <div 
+              className="absolute inset-0 flex items-center justify-center pointer-events-none"
+              style={{ zIndex: 1000 }}
+            >
+              <div className="bg-vscode-button-background text-vscode-button-foreground px-4 py-2 rounded shadow-lg">
+                Drop component here
+              </div>
+            </div>
+          )}
         </ReactFlow>
       </div>
     </div>

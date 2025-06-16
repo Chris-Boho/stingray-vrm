@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ReactFlowProvider } from '@xyflow/react';
 import { SectionType } from '../../types/vrm';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useEditorStore } from '../../stores/editorStore';
@@ -10,7 +11,7 @@ interface EditorLayoutProps {
   children?: React.ReactNode;
 }
 
-const EditorLayout: React.FC<EditorLayoutProps> = ({ children }) => {
+const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
   const [isPaletteCollapsed, setIsPaletteCollapsed] = useState(false);
   const { document, isLoading, isDirty } = useDocumentStore();
   const { activeSection, setActiveSection } = useEditorStore();
@@ -244,6 +245,15 @@ const EditorLayout: React.FC<EditorLayoutProps> = ({ children }) => {
         </div>
       </footer>
     </div>
+  );
+};
+
+// Wrap the entire editor layout with ReactFlowProvider
+const EditorLayout: React.FC<EditorLayoutProps> = (props) => {
+  return (
+    <ReactFlowProvider>
+      <EditorLayoutContent {...props} />
+    </ReactFlowProvider>
   );
 };
 
