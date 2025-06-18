@@ -52,32 +52,37 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
   
   components.forEach(component => {
     // Primary connection (first j element) - Light blue
-    if (component.j[0] && component.j[0] > 0) {
-      edges.push({
-        id: `${component.n}-primary-${component.j[0]}`,
-        source: component.n.toString(),
-        target: component.j[0].toString(),
-        type: 'smoothstep',
-        sourceHandle: 'primary',
-        style: { stroke: '#60a5fa', strokeWidth: 2 }, // Light blue
-        data: { connectionType: 'primary' }
-      });
+    if (component.j && component.j[0] && component.j[0] > 0) {
+      const targetExists = components.some(c => c.n === component.j[0]);
+      if (targetExists) {
+        edges.push({
+          id: `e${component.n}-${component.j[0]}`,
+          source: component.n.toString(),
+          target: component.j[0].toString(),
+          type: 'smoothstep',
+          style: { stroke: '#60a5fa', strokeWidth: 2 }, // Light blue
+          data: { connectionType: 'primary' }
+        });
+      }
     }
     
     // Secondary connection (second j element) - Grey
-    if (component.j[1] && component.j[1] > 0) {
-      edges.push({
-        id: `${component.n}-secondary-${component.j[1]}`,
-        source: component.n.toString(),
-        target: component.j[1].toString(),
-        type: 'smoothstep',
-        sourceHandle: 'secondary',
-        style: { stroke: '#9ca3af', strokeWidth: 2 }, // Grey
-        data: { connectionType: 'secondary' }
-      });
+    if (component.j && component.j[1] && component.j[1] > 0) {
+      const targetExists = components.some(c => c.n === component.j[1]);
+      if (targetExists) {
+        edges.push({
+          id: `e${component.n}-${component.j[1]}-secondary`,
+          source: component.n.toString(),
+          target: component.j[1].toString(),
+          type: 'smoothstep',
+          style: { stroke: '#9ca3af', strokeWidth: 2 }, // Grey
+          data: { connectionType: 'secondary' }
+        });
+      }
     }
   });
   
+  console.log('Generated edges:', edges);
   return edges;
 };
 

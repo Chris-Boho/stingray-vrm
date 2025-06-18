@@ -214,33 +214,20 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
         )} */}
       </div>
       
-      {/* Output Handle - Bottom center */}
+      {/* Output Handle - Bottom center (handles both primary and secondary connections) */}
       <Handle
         type="source"
         position={Position.Bottom}
-        id="primary"
-        className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-gray-500 !rounded-full"
+        id="output"
+        className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-gray-500 !rounded-full !visible"
         style={{
           bottom: -6,
           left: '50%',
           transform: 'translateX(-50%)',
+          visibility: 'visible',
+          pointerEvents: 'all'
         }}
       />
-      
-      {/* Secondary Output Handle - For IF components and dual connections */}
-      {(type === 'IF' || (component.j && component.j[1] > 0)) && (
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          id="secondary"
-          className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-red-500 !rounded-full"
-          style={{
-            bottom: -6,
-            left: '75%',
-            transform: 'translateX(-50%)',
-          }}
-        />
-      )}
     </div>
   );
 });
