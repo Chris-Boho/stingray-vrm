@@ -22,6 +22,12 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
 import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
+import StingrayEdge from './StingrayEdge';
+
+// Define custom edge types
+const edgeTypes = {
+  stingray: StingrayEdge,
+};
 
 interface WorkflowCanvasProps {
   section: SectionType;
@@ -59,8 +65,7 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
           id: `e${component.n}-${component.j[0]}`,
           source: component.n.toString(),
           target: component.j[0].toString(),
-          type: 'smoothstep',
-          style: { stroke: '#60a5fa', strokeWidth: 2 }, // Light blue
+          type: 'stingray',  // Use our custom edge type
           data: { connectionType: 'primary' }
         });
       }
@@ -74,8 +79,7 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
           id: `e${component.n}-${component.j[1]}-secondary`,
           source: component.n.toString(),
           target: component.j[1].toString(),
-          type: 'smoothstep',
-          style: { stroke: '#9ca3af', strokeWidth: 2 }, // Grey
+          type: 'stingray',  // Use our custom edge type
           data: { connectionType: 'secondary' }
         });
       }
@@ -257,6 +261,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
