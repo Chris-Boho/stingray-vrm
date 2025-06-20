@@ -13,12 +13,29 @@ const getStingrayPath = (
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
   const pathOffset = 20; // Fixed offset length for start and end segments
+  let path = '';
   
   // Check if components are aligned
   const isVerticallyAligned = Math.abs(dx) < 5; // Allow small tolerance for alignment
   const isHorizontallyAligned = Math.abs(dy) < 5;
   
-  // If vertically aligned (same X), draw a straight line
+  // Check if components are vertically aligned AND very close (within 10px)
+  if (isVerticallyAligned && Math.abs(dy) < 12.6) {
+    console.log('Vertical alignment detected:', isVerticallyAligned, Math.abs(dy));
+    // Create a left-side loop
+    const loopOffset = 25; // How far to the left to make the loop
+    
+    if (dy >= 0) {
+      // Target is below or at same level as source
+      path = `M ${sourceX},${sourceY} L ${sourceX - loopOffset},${sourceY} L ${sourceX - loopOffset},${targetY} L ${targetX},${targetY}`;
+    } else {
+      // Target is above source
+      path = `M ${sourceX},${sourceY} L ${sourceX - loopOffset},${sourceY} L ${sourceX - loopOffset},${targetY} L ${targetX},${targetY}`;
+    }
+    return path;
+  }
+  
+  // If vertically aligned but further apart, draw a straight line
   if (isVerticallyAligned) {
     return `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
   }
@@ -26,10 +43,7 @@ const getStingrayPath = (
   // If horizontally aligned (same Y), draw a straight line
   if (isHorizontallyAligned) {
     return `M ${sourceX},${sourceY} L ${targetX},${targetY}`;
-  }
-  
-  // Otherwise, create orthogonal path
-  let path = '';
+  }  
   
   // Calculate midpoint between source and target X
   const midX = sourceX + dx / 2;
