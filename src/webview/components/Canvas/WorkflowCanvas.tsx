@@ -119,6 +119,31 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     return section === 'preproc' ? document.preproc : document.postproc;
   }, [document, section]);
 
+  // Calculate dynamic canvas size based on component positions
+  const canvasSize = useMemo(() => {
+    if (sectionComponents.length === 0) {
+      return { width: 1200, height: 800 }; // Default size for empty sections
+    }
+
+    // Find the bounds of all components
+    const maxX = Math.max(...sectionComponents.map(c => c.x + 128)); // Add component width
+    const maxY = Math.max(...sectionComponents.map(c => c.y + 32));  // Add component height
+    
+    // Add padding: 500px below highest component, 200px to the right of rightmost
+    const dynamicWidth = Math.max(1200, maxX + 200);
+    const dynamicHeight = Math.max(800, maxY + 500);
+    
+    console.log('Canvas size calculated:', { 
+      componentsCount: sectionComponents.length,
+      maxX, 
+      maxY, 
+      dynamicWidth, 
+      dynamicHeight 
+    });
+    
+    return { width: dynamicWidth, height: dynamicHeight };
+  }, [sectionComponents]);
+
   // Convert VRM components to ReactFlow nodes
   const initialNodes = useMemo(() => {
     return sectionComponents.map(convertVrmComponentToNode);
@@ -364,7 +389,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           }}
           translateExtent={[
             [0, 0],
-            [2000, 1000]
+            [canvasSize.width, canvasSize.height]
           ]}
           style={{ 
             width: '100%', 
