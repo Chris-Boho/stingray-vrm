@@ -50,6 +50,7 @@ const convertVrmComponentToNode = (component: VrmComponent): Node => {
       type: component.t,
     },
     selected: false,
+    draggable: true,
   };
 };
 
@@ -106,6 +107,11 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     updateTempConnection, 
     tempConnection 
   } = useConnectionStore();
+
+  // Debug: Log current selection state
+  useEffect(() => {
+    console.log('🔍 Current selectedComponents in store:', selectedComponents);
+  }, [selectedComponents]);
   
   // Use React Flow instance for coordinate conversion
   const reactFlowInstance = useReactFlow();
@@ -191,13 +197,23 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   }, [selectComponents]);
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
+    // Check if we clicked on a node - if so, don't clear selection
+    const target = event.target as HTMLElement;
+    const clickedOnNode = target.closest('.react-flow__node');
+    
+    if (clickedOnNode) {
+      console.log('Clicked on node, not clearing selection');
+      return;
+    }
+    
     // Cancel connection creation if clicking on empty space
     if (isCreating) {
       cancelConnection();
       console.log('Connection cancelled by clicking on empty space');
       return;
     }
-
+  
+    console.log('Clearing selection from pane click');
     clearSelection();
   }, [clearSelection, isCreating, cancelConnection]);
 
@@ -291,23 +307,23 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   // ✅ All effect hooks
   useEffect(() => {
     const newNodes = sectionComponents.map(convertVrmComponentToNode);
+    
     // Preserve current node positions when updating
     setNodes(currentNodes => {
       const nodeMap = new Map(currentNodes.map(node => [node.id, node]));
       return newNodes.map(newNode => {
         const existingNode = nodeMap.get(newNode.id);
         if (existingNode) {
-          // Keep the current position if node already exists
+          // Keep ALL existing node state
           return {
-            ...newNode,
-            position: existingNode.position,
-            selected: existingNode.selected
+            ...existingNode,  // Keep everything from existing node
+            data: newNode.data,  // Only update the data
           };
         }
         return newNode;
       });
     });
-  }, [sectionComponents, setNodes]);
+  }, [setNodes]); // DO NOT include selectedComponents
 
   useEffect(() => {
     const newEdges = convertConnectionsToEdges(sectionComponents);
@@ -362,6 +378,11 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          // onNodeDragStart={(event, node) => console.log('🎯 Drag start:', node.id)}
+          // onNodeDrag={(event, node) => console.log('🎯 Dragging:', node.id)}
+          // onNodeDragStop={(event, node) => console.log('🎯 Drag stop:', node.id, node.position)}
+          // onNodeMouseEnter={(event, node) => console.log('🐭 Mouse enter:', node.id, ', Current selectedComponents in store:', selectedComponents)}
+          // onNodeMouseLeave={(event, node) => console.log('🐭 Mouse leave:', node.id)}
           onNodesChange={onNodesChangeHandler}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -375,18 +396,21 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           defaultViewport={{ x: pan.x, y: pan.y, zoom }}
           selectNodesOnDrag={false}
           selectionOnDrag={true}
-          panOnDrag={true}
+          panOnDrag={false}
+          panOnScroll={true}  // Add this
+          zoomOnScroll={true}  // Add this
+          preventScrolling={true}  // Add this
           minZoom={0.1}
           maxZoom={3}
           snapToGrid={grid.snapToGrid}
           snapGrid={[grid.cellSize.x, grid.cellSize.y]}
-          fitView
-          fitViewOptions={{ 
-            padding: 0.2,
-            includeHiddenNodes: false,
-            minZoom: 0.5,
-            maxZoom: 1.5 
-          }}
+          // fitView
+          // fitViewOptions={{ 
+          //   padding: 0.2,
+          //   includeHiddenNodes: false,
+          //   minZoom: 0.5,
+          //   maxZoom: 1.5 
+          // }}
           translateExtent={[
             [0, 0],
             [canvasSize.width, canvasSize.height]

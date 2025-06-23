@@ -33,7 +33,7 @@ export const DragDropLayout: React.FC<DragDropLayoutProps> = ({
   isPaletteCollapsed = false,
   onTogglePalette
 }) => {
-  console.log('DragDropLayout rendered');
+  console.log('DragDropLayout rendered with: ', { section, isPaletteCollapsed });
 
   return (
     <DnDProvider>

@@ -1,4 +1,4 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useEffect } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { VrmComponent, ComponentType } from '../../types/vrm';
 import { useSelectionStore } from '../../stores/selectionStore';
@@ -140,6 +140,13 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
   const colors = getComponentColor(type);
   const abbreviation = getComponentAbbreviation(type);
   const isComponentSelected = isSelected(component.n);
+
+    // Debug logging
+    useEffect(() => {
+      if (selected || isComponentSelected) {
+        console.log(`🔲 Component ${component.n}: ReactFlow selected=${selected}, store selected=${isComponentSelected}`);
+      }
+    }, [selected, isComponentSelected, component.n]);
 
   // Truncate long comments
   const maxCommentLength = 35;
