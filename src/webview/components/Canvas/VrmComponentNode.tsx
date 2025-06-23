@@ -1,8 +1,9 @@
-import React, { memo } from 'react';
+import React, { memo, useCallback } from 'react';
 import { Handle, Position, NodeProps } from '@xyflow/react';
 import { VrmComponent, ComponentType } from '../../types/vrm';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
+import { useConnectionHandler } from './connectionHandler';
 
 interface VrmComponentNodeData {
   component: VrmComponent;
@@ -10,15 +11,13 @@ interface VrmComponentNodeData {
   type: ComponentType;
 }
 
-// Properly typed NodeProps for our VRM component
 type VrmComponentNodeProps = NodeProps & {
   data: VrmComponentNodeData;
 };
 
-// Component type to color mapping - Each component type has a unique, meaningful color
+// Component type to color mapping
 const getComponentColor = (type: ComponentType): { bg: string; border: string; text: string; shadow: string } => {
   switch (type) {
-    // Database Components - Blue family
     case 'SQLTRN':
       return {
         bg: 'bg-gradient-to-r from-blue-600 to-blue-700',
@@ -40,8 +39,6 @@ const getComponentColor = (type: ComponentType): { bg: string; border: string; t
         text: 'text-white',
         shadow: 'shadow-cyan-500/20'
       };
-    
-    // Script Components - Green family
     case 'CSF':
       return {
         bg: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
@@ -56,8 +53,6 @@ const getComponentColor = (type: ComponentType): { bg: string; border: string; t
         text: 'text-white',
         shadow: 'shadow-green-500/20'
       };
-    
-    // Control Flow Components - Distinct colors
     case 'IF':
       return {
         bg: 'bg-gradient-to-r from-amber-500 to-amber-600',
@@ -72,8 +67,6 @@ const getComponentColor = (type: ComponentType): { bg: string; border: string; t
         text: 'text-white',
         shadow: 'shadow-red-500/20'
       };
-    
-    // Data Components - Purple family
     case 'SET':
       return {
         bg: 'bg-gradient-to-r from-purple-500 to-purple-600',
@@ -88,8 +81,6 @@ const getComponentColor = (type: ComponentType): { bg: string; border: string; t
         text: 'text-white',
         shadow: 'shadow-violet-500/20'
       };
-    
-    // Integration Components - Distinct colors
     case 'EXTERNAL':
       return {
         bg: 'bg-gradient-to-r from-indigo-500 to-indigo-600',
@@ -104,7 +95,6 @@ const getComponentColor = (type: ComponentType): { bg: string; border: string; t
         text: 'text-white',
         shadow: 'shadow-pink-500/20'
       };
-    
     default:
       return {
         bg: 'bg-gradient-to-r from-gray-500 to-gray-600',
@@ -115,22 +105,22 @@ const getComponentColor = (type: ComponentType): { bg: string; border: string; t
   }
 };
 
-// Component type to abbreviation mapping
+// Component type abbreviations
 const getComponentAbbreviation = (type: ComponentType): string => {
-  switch (type) {
-    case 'SQLTRN': return 'ST';
-    case 'SELECTQUERY': return 'SQ';
-    case 'INSERTUPDATEQUERY': return 'IU';
-    case 'CSF': return 'CF';
-    case 'SCRIPT': return 'SC';
-    case 'IF': return 'IF';
-    case 'ERROR': return 'ER';
-    case 'SET': return 'SE';
-    case 'MATH': return 'MA';
-    case 'EXTERNAL': return 'EX';
-    case 'TEMPLATE': return 'TP';
-    default: return 'UN';
-  }
+  const abbreviations: Record<ComponentType, string> = {
+    'SQLTRN': 'ST',
+    'SELECTQUERY': 'SQ',
+    'INSERTUPDATEQUERY': 'IU',
+    'CSF': 'CF',
+    'SCRIPT': 'SC',
+    'IF': 'IF',
+    'ERROR': 'ER',
+    'SET': 'SE',
+    'MATH': 'MA',
+    'EXTERNAL': 'EX',
+    'TEMPLATE': 'TP'
+  };
+  return abbreviations[type] || 'UN';
 };
 
 export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({ 
@@ -141,19 +131,34 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
   const { isSelected } = useSelectionStore();
   const { setEditingComponent } = useComponentStore();
   
+  // Use connection handler
+  const { handleClick, handleContextMenu, canHaveOutgoing } = useConnectionHandler(
+    component.n, 
+    component.t
+  );
+  
   const colors = getComponentColor(type);
   const abbreviation = getComponentAbbreviation(type);
   const isComponentSelected = isSelected(component.n);
 
-  // Truncate comment to fit in the available space (approximately 35 characters)
+  // Truncate long comments
   const maxCommentLength = 35;
   const truncatedComment = component.c && component.c.length > maxCommentLength 
     ? component.c.substring(0, maxCommentLength) + '...'
     : component.c;
 
-  const handleDoubleClick = () => {
+  const handleDoubleClick = useCallback(() => {
     setEditingComponent(component.n);
-  };
+  }, [setEditingComponent, component.n]);
+
+  const onComponentClick = useCallback((event: React.MouseEvent) => {
+    const handled = handleClick(event);
+    // If connection handler didn't handle it, let ReactFlow handle selection
+  }, [handleClick]);
+
+  const onComponentContextMenu = useCallback((event: React.MouseEvent) => {
+    handleContextMenu(event);
+  }, [handleContextMenu]);
 
   return (
     <div className="vrm-component-node relative">
@@ -170,7 +175,7 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
         }}
       />
       
-      {/* Main Component Container - 32 × 32px */}
+      {/* Main Component Container */}
       <div
         className={`
           relative w-8 h-8 rounded-md border-2 cursor-pointer overflow-visible
@@ -183,17 +188,19 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
           }
           ${component.wp === true ? 'ring-2 ring-red-400 ring-offset-1' : ''}
         `}
+        onClick={onComponentClick}
+        onContextMenu={onComponentContextMenu}
         onDoubleClick={handleDoubleClick}
-        title={component.c ? `${component.n}: ${component.c}` : `Component ${component.n}`}
+        title={`${component.n}: ${component.c || type}\n\nWith component selected:\nAlt+Click: Primary connection\nAlt+Right Click: Secondary connection`}
       >
-        {/* Left section - Component type abbreviation */}
+        {/* Component Type Abbreviation */}
         <div className="absolute left-0 top-0 bottom-0 flex items-center px-2 z-10">
           <div className="text-xs font-bold tracking-wide drop-shadow-sm">
             {abbreviation}
           </div>
         </div>
         
-        {/* Right section - Component number and comment */}
+        {/* Component Number and Comment */}
         <div className="absolute left-8 top-0 bottom-0 min-w-max pr-2 flex items-center">
           <div className="flex items-center text-xs bg-inherit pl-2 rounded-r">
             <span className="font-semibold text-white/90">{component.n}</span>
@@ -207,27 +214,25 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
         </div>
         
         {/* Watchpoint Indicator */}
-        {/* {component.wp === true && (
-          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-md">
-            <div className="w-full h-full bg-red-500 rounded-full animate-ping"></div>
-          </div>
-        )} */}
+        {component.wp === true && (
+          <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-md animate-pulse"></div>
+        )}
       </div>
       
-      {/* Output Handle - Bottom center (handles both primary and secondary connections) */}
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="output"
-        className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-gray-500 !rounded-full !visible"
-        style={{
-          bottom: -6,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          visibility: 'visible',
-          pointerEvents: 'all'
-        }}
-      />
+      {/* Output Handle - Only show if component can have outgoing connections */}
+      {canHaveOutgoing && (
+        <Handle
+          type="source"
+          position={Position.Bottom}
+          id="output"
+          className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-gray-500 !rounded-full"
+          style={{
+            bottom: -6,
+            left: '50%',
+            transform: 'translateX(-50%)',
+          }}
+        />
+      )}
     </div>
   );
 });

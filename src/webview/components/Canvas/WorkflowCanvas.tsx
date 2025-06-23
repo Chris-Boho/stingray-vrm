@@ -20,6 +20,7 @@ import { useDocumentStore } from '../../stores/documentStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
+import { useConnectionStore } from '../../stores/connectionStore';
 import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
 import StingrayEdge from './StingrayEdge';
@@ -99,6 +100,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   const { zoom, setZoom, pan, setPan, grid } = useEditorStore();
   const { selectedComponents, selectComponents, clearSelection } = useSelectionStore();
   const { createComponent } = useComponentStore();
+  const { 
+    isCreating, 
+    cancelConnection, 
+    updateTempConnection, 
+    tempConnection 
+  } = useConnectionStore();
   
   // Use React Flow instance for coordinate conversion
   const reactFlowInstance = useReactFlow();
@@ -135,19 +142,64 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     [setEdges]
   );
 
+  const onNodesChangeHandler = useCallback((changes: any[]) => {
+    // Handle position changes to update VRM data
+    changes.forEach(change => {
+      if (change.type === 'position' && change.position && !change.dragging) {
+        // Update VRM component position when drag ends
+        const componentId = parseInt(change.id);
+        const documentStore = useDocumentStore.getState();
+        documentStore.updateComponent(componentId, {
+          x: Math.round(change.position.x),
+          y: Math.round(change.position.y)
+        });
+      }
+    });
+    
+    // Apply the changes to ReactFlow
+    onNodesChange(changes);
+  }, [onNodesChange]);
+
   const onSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     const selectedNodeIds = params.nodes.map(node => parseInt(node.id));
     selectComponents(selectedNodeIds);
   }, [selectComponents]);
 
-  const onPaneClick = useCallback(() => {
+  const onPaneClick = useCallback((event: React.MouseEvent) => {
+    // Cancel connection creation if clicking on empty space
+    if (isCreating) {
+      cancelConnection();
+      console.log('Connection cancelled by clicking on empty space');
+      return;
+    }
+
     clearSelection();
-  }, [clearSelection]);
+  }, [clearSelection, isCreating, cancelConnection]);
 
   const onViewportChange = useCallback((viewport: { x: number; y: number; zoom: number }) => {
     setZoom(viewport.zoom);
     setPan({ x: viewport.x, y: viewport.y });
   }, [setZoom, setPan]);
+
+  // Mouse move handler for connection preview
+  const onMouseMove = useCallback((event: React.MouseEvent) => {
+    if (isCreating) {
+      // Update temp connection position
+      const position = reactFlowInstance.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
+      updateTempConnection(position);
+    }
+  }, [isCreating, updateTempConnection, reactFlowInstance]);
+
+  // Keyboard handler for ESC key
+  const onKeyDown = useCallback((event: KeyboardEvent) => {
+    if (event.key === 'Escape' && isCreating) {
+      cancelConnection();
+      console.log('Connection cancelled with ESC key');
+    }
+  }, [isCreating, cancelConnection]);
 
   // Drop handling
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -214,13 +266,36 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   // ✅ All effect hooks
   useEffect(() => {
     const newNodes = sectionComponents.map(convertVrmComponentToNode);
-    setNodes(newNodes);
+    // Preserve current node positions when updating
+    setNodes(currentNodes => {
+      const nodeMap = new Map(currentNodes.map(node => [node.id, node]));
+      return newNodes.map(newNode => {
+        const existingNode = nodeMap.get(newNode.id);
+        if (existingNode) {
+          // Keep the current position if node already exists
+          return {
+            ...newNode,
+            position: existingNode.position,
+            selected: existingNode.selected
+          };
+        }
+        return newNode;
+      });
+    });
   }, [sectionComponents, setNodes]);
 
   useEffect(() => {
     const newEdges = convertConnectionsToEdges(sectionComponents);
     setEdges(newEdges);
   }, [sectionComponents, setEdges]);
+
+  // Add keyboard event listener for ESC key
+  useEffect(() => {
+    window.document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [onKeyDown]);
 
   // ✅ NOW handle conditional rendering - after all hooks are declared
   if (!document) {
@@ -262,11 +337,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          onNodesChange={onNodesChange}
+          onNodesChange={onNodesChangeHandler}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onSelectionChange={onSelectionChange}
           onPaneClick={onPaneClick}
+          onPaneMouseMove={onMouseMove}
           onViewportChange={onViewportChange}
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -294,7 +370,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             width: '100%', 
             height: '600px',
             backgroundColor: isDragOver ? 'rgba(96, 165, 250, 0.1)' : undefined,
-            transition: 'background-color 0.2s'
+            transition: 'background-color 0.2s',
+            cursor: isCreating ? 'crosshair' : 'default'
           }}
         >
           <Background
@@ -326,6 +403,11 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           <Panel position="top-center">
             <div className="bg-vscode-editor-bg border border-vscode-border rounded px-3 py-1 text-sm text-vscode-foreground">
               {section.charAt(0).toUpperCase() + section.slice(1)} Section - {sectionComponents.length} Components
+              {isCreating && (
+                <span className="ml-2 text-blue-400">
+                  • Creating connection...
+                </span>
+              )}
             </div>
           </Panel>
           
@@ -340,8 +422,53 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
               </div>
             </div>
           )}
+
+          {/* Temporary Connection Line */}
+          {isCreating && tempConnection && (
+            <svg 
+              className="absolute inset-0 pointer-events-none"
+              style={{ zIndex: 1001 }}
+            >
+              <defs>
+                <marker
+                  id="temp-arrowhead"
+                  markerWidth="6"
+                  markerHeight="6"
+                  refX="5"
+                  refY="3"
+                  orient="auto"
+                >
+                  <polygon
+                    points="0 0, 6 3, 0 6"
+                    fill="#60a5fa"
+                  />
+                </marker>
+              </defs>
+              <line
+                x1={tempConnection.start.x}
+                y1={tempConnection.start.y}
+                x2={tempConnection.end.x}
+                y2={tempConnection.end.y}
+                stroke="#60a5fa"
+                strokeWidth="2"
+                strokeDasharray="5,5"
+                markerEnd="url(#temp-arrowhead)"
+              />
+            </svg>
+          )}
         </ReactFlow>
       </div>
+
+      {/* Connection Mode Instructions */}
+      {isCreating && (
+        <div className="absolute top-4 left-4 bg-blue-500 text-white p-3 rounded shadow-lg z-50">
+          <div className="text-sm font-medium">Creating Connection</div>
+          <div className="text-xs mt-1">
+            Click on target component to connect<br/>
+            Press ESC or click empty space to cancel
+          </div>
+        </div>
+      )}
     </div>
   );
 };
