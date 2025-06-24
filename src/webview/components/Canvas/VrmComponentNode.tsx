@@ -142,11 +142,11 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
   const isComponentSelected = isSelected(component.n);
 
     // Debug logging
-    useEffect(() => {
-      if (selected || isComponentSelected) {
-        console.log(`🔲 Component ${component.n}: ReactFlow selected=${selected}, store selected=${isComponentSelected}`);
-      }
-    }, [selected, isComponentSelected, component.n]);
+    // useEffect(() => {
+    //   if (selected || isComponentSelected) {
+    //     console.log(`🔲 Component ${component.n}: ReactFlow selected=${selected}, store selected=${isComponentSelected}`);
+    //   }
+    // }, [selected, isComponentSelected, component.n]);
 
   // Truncate long comments
   const maxCommentLength = 35;

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useStoreApi } from '@xyflow/react';
 import { ComponentType } from '../../types/vrm';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
 import { useDocumentStore } from '../../stores/documentStore';
+import { useEditorStore } from '../../stores/editorStore';
 
 interface ContextMenuPosition {
   x: number;
@@ -21,14 +23,26 @@ interface MenuSection {
   items: MenuItem[];
 }
 
-interface MenuItem {
-  id: string;
-  label: string;
-  icon?: React.ReactNode;
-  disabled?: boolean;
-  onClick?: () => void;
-  submenu?: MenuItem[];
-}
+// Update the MenuItem type at the top of your file
+type MenuItem = 
+  | {
+      id: string;
+      label: string;
+      icon?: React.ReactNode;
+      disabled?: boolean;
+      onClick?: () => void;
+      submenu?: MenuItem[];
+      type?: undefined;
+    }
+  | {
+      type: 'divider';
+      id?: never;
+      label?: never;
+      icon?: never;
+      disabled?: never;
+      onClick?: never;
+      submenu?: never;
+    };
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({
   position,
@@ -39,14 +53,23 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   const menuRef = useRef<HTMLDivElement>(null);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   
-  const { selectedComponents, selectComponent, clearSelection } = useSelectionStore();
+  // React Flow store API for internal selection management
+  const store = useStoreApi();
+  
+  const { selectedComponents, clearSelection, selectAll, selectComponents } = useSelectionStore();
   const { setEditingComponent, getComponentTemplate } = useComponentStore();
   const { document } = useDocumentStore();
+  const { activeSection } = useEditorStore();
 
   // Get component data if we have a target
   const targetComponent = targetComponentId 
     ? [...(document?.preproc || []), ...(document?.postproc || [])].find(c => c.n === targetComponentId)
     : null;
+
+  // Get all components in the current section
+  const currentSectionComponents = document 
+    ? (activeSection === 'preproc' ? document.preproc : document.postproc)
+    : [];
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -75,21 +98,49 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
   // Handle menu item selection
   const handleSelectAction = useCallback((action: string) => {
-    if (!targetComponentId) return;
+    const reactFlowState = store.getState();
     
     switch (action) {
-      case 'select-single':
-        selectComponent(targetComponentId, false);
+      case 'select-all':
+        // Get all component IDs in current section
+        const allComponentIds = currentSectionComponents.map(c => c.n);
+        const allNodeIds = allComponentIds.map(id => id.toString());
+        
+        console.log('Select All triggered:', {
+          section: activeSection,
+          componentCount: allComponentIds.length,
+          nodeIds: allNodeIds
+        });
+        
+        // Clear our store first
+        clearSelection();
+        
+        // Update React Flow selection with all nodes
+        reactFlowState.addSelectedNodes(allNodeIds);
+        
+        // Update our store with all component IDs
+        selectAll(allComponentIds);
+        
+        console.log('Select All completed');
         break;
-      case 'select-add':
-        selectComponent(targetComponentId, true);
-        break;
+        
       case 'select-clear':
+        // Clear React Flow selection
+        reactFlowState.addSelectedNodes([]);
+        
+        // Clear our store
         clearSelection();
         break;
     }
     onClose();
-  }, [targetComponentId, selectComponent, clearSelection, onClose]);
+  }, [
+    clearSelection, 
+    selectAll,
+    currentSectionComponents,
+    activeSection,
+    store,
+    onClose
+  ]);
 
   const handleEditAction = useCallback((action: string) => {
     if (!targetComponentId) return;
@@ -121,147 +172,211 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   // Build menu sections based on context
   const buildMenuSections = useCallback((): MenuSection[] => {
     const sections: MenuSection[] = [];
+    const mainMenuItems: MenuItem[] = [];
 
-    // SELECT section - only show if we have a target component
-    if (targetComponentId) {
-      const isSelected = selectedComponents.includes(targetComponentId);
-      const hasMultipleSelected = selectedComponents.length > 1;
-      
-      sections.push({
-        title: 'Select',
-        items: [
-          {
-            id: 'select-single',
-            label: isSelected ? 'Selected' : 'Select This',
-            icon: (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
-              </svg>
-            ),
-            disabled: isSelected && !hasMultipleSelected,
-            onClick: () => handleSelectAction('select-single')
+    // SELECT section - only show global selection actions
+    const hasSelection = selectedComponents.length > 0;
+    const allComponentsSelected = selectedComponents.length === currentSectionComponents.length && currentSectionComponents.length > 0;
+
+    // Select menu
+    mainMenuItems.push({
+      id: 'select',
+      label: 'Select',
+      icon: (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M16.707 5.293a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+        </svg>
+      ),
+      submenu: [
+        {
+          id: 'select-all',
+          label: 'Select All',
+          onClick: () => {
+            handleSelectAction('select-all')
           },
-          {
-            id: 'select-add',
-            label: isSelected ? 'Remove from Selection' : 'Add to Selection',
-            icon: (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
-              </svg>
-            ),
-            onClick: () => handleSelectAction('select-add')
-          },
-          {
-            id: 'select-clear',
-            label: 'Clear Selection',
-            icon: (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"/>
-              </svg>
-            ),
-            disabled: selectedComponents.length === 0,
-            onClick: () => handleSelectAction('select-clear')
+          disabled: currentSectionComponents.length === 0 || allComponentsSelected,
+        },
+        {
+          id: 'select-none',
+          label: 'Select None',
+          disabled: selectedComponents.length === 0,
+          onClick: () => {
+            clearSelection();
+            onClose();
           }
-        ]
-      });
-    }
-
-    // EDIT section - only show if we have a target component
-    if (targetComponentId && targetComponent) {
-      sections.push({
-        title: 'Edit',
-        items: [
-          {
-            id: 'edit-properties',
-            label: 'Edit Properties...',
-            icon: (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-              </svg>
-            ),
-            onClick: () => handleEditAction('edit-properties')
-          },
-          {
-            id: 'edit-duplicate',
-            label: 'Duplicate',
-            icon: (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-                <path fillRule="evenodd" d="M4 5a2 2 0 012-2v1a1 1 0 001 1h6a1 1 0 001-1V3a2 2 0 012 2v6a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd"/>
-              </svg>
-            ),
-            onClick: () => handleEditAction('edit-duplicate')
-          },
-          {
-            id: 'edit-delete',
-            label: 'Delete',
-            icon: (
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
-              </svg>
-            ),
-            onClick: () => handleEditAction('edit-delete')
+        },
+        {
+          id: 'select-invert',
+          label: 'Invert Selection',
+          disabled: selectedComponents.length === 0,
+          onClick: () => {
+            const allIds = currentSectionComponents.map(c => c.n);
+            const inverted = allIds.filter(id => !selectedComponents.includes(id));
+            selectComponents(inverted);
+            onClose();
           }
-        ]
-      });
-    }
+        },
+        { type: 'divider' },
+        {
+          id: 'select-all-above',
+          label: 'All Above',
+          disabled: !targetComponentId,
+          onClick: () => {
+            if (!targetComponentId) return;
+            const currentIndex = currentSectionComponents.findIndex(c => c.n === targetComponentId);
+            if (currentIndex > 0) {
+              const componentsAbove = currentSectionComponents.slice(0, currentIndex);
+              selectComponents(componentsAbove.map(c => c.n));
+            }
+            onClose();
+          }
+        },
+        {
+          id: 'select-all-below',
+          label: 'All Below',
+          disabled: !targetComponentId,
+          onClick: () => {
+            if (!targetComponentId) return;
+            const currentIndex = currentSectionComponents.findIndex(c => c.n === targetComponentId);
+            if (currentIndex < currentSectionComponents.length - 1) {
+              const componentsBelow = currentSectionComponents.slice(currentIndex + 1);
+              selectComponents(componentsBelow.map(c => c.n));
+            }
+            onClose();
+          }
+        }
+      ]
+    });
 
-    // INSERT section - show when clicking on empty space or always as submenu
-    if (canvasPosition || targetComponentId) {
-      const componentTypes: { type: ComponentType; category: string }[] = [
-        // Database
-        { type: 'SQLTRN', category: 'Database' },
-        { type: 'SELECTQUERY', category: 'Database' },
-        { type: 'INSERTUPDATEQUERY', category: 'Database' },
-        // Script
-        { type: 'CSF', category: 'Script' },
-        { type: 'SCRIPT', category: 'Script' },
-        // Control
-        { type: 'IF', category: 'Control' },
-        { type: 'ERROR', category: 'Control' },
-        // Data
-        { type: 'SET', category: 'Data' },
-        { type: 'MATH', category: 'Data' },
-        // Integration
-        { type: 'EXTERNAL', category: 'Integration' },
-        { type: 'TEMPLATE', category: 'Integration' },
-      ];
+    // Edit menu
+    mainMenuItems.push({
+      id: 'edit',
+      label: 'Edit',
+      icon: (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
+        </svg>
+      ),
+      submenu: [
+        {
+          id: 'edit-cut',
+          label: 'Cut',
+          disabled: selectedComponents.length === 0,
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12a1 1 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
+            </svg>
+          ),
+          onClick: () => {
+            console.log('Cut components:', selectedComponents);
+            onClose();
+          }
+        },
+        {
+          id: 'edit-copy',
+          label: 'Copy',
+          disabled: selectedComponents.length === 0,
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+          ),
+          onClick: () => {
+            console.log('Copy components:', selectedComponents);
+            onClose();
+          }
+        },
+        {
+          id: 'edit-paste',
+          label: 'Paste',
+          disabled: true, // TODO: Enable when clipboard has content
+          icon: (
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+            </svg>
+          ),
+          onClick: () => {
+            console.log('Paste components');
+            onClose();
+          }
+        },
+        { type: 'divider' },
+        {
+          id: 'edit-delete',
+          label: 'Delete',
+          disabled: selectedComponents.length === 0,
+          icon: (
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd"/>
+            </svg>
+          ),
+          onClick: () => {
+            handleEditAction('edit-delete');
+            onClose();
+          }
+        },
+        { type: 'divider' },
+        {
+          id: 'edit-properties',
+          label: 'Properties',
+          disabled: selectedComponents.length !== 1,
+          onClick: () => {
+            if (selectedComponents.length === 1) {
+              handleEditAction('edit-properties');
+              onClose();
+            }
+          }
+        }
+      ]
+    });
 
-      // Group by category
-      const categorizedComponents = componentTypes.reduce((acc, { type, category }) => {
-        if (!acc[category]) acc[category] = [];
-        const template = getComponentTemplate(type);
-        acc[category].push({
-          id: `insert-${type}`,
-          label: template?.label || type,
-          onClick: () => handleInsertAction(type)
-        });
-        return acc;
-      }, {} as Record<string, MenuItem[]>);
+    // Insert menu
+    mainMenuItems.push({
+      id: 'insert',
+      label: 'Insert',
+      icon: (
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd"/>
+        </svg>
+      ),
+      submenu: [
+        { id: 'insert-sqltrn', label: 'Transaction', onClick: () => handleInsertAction('SQLTRN') },
+        { id: 'insert-select', label: 'Select Query', onClick: () => handleInsertAction('SELECTQUERY') },
+        { id: 'insert-update', label: 'Insert/Update Query', onClick: () => handleInsertAction('INSERTUPDATEQUERY') },
+        { type: 'divider' },
+        { id: 'insert-csf', label: 'Script Function', onClick: () => handleInsertAction('CSF') },
+        { id: 'insert-script', label: 'Script Block', onClick: () => handleInsertAction('SCRIPT') },
+        { type: 'divider' },
+        { id: 'insert-if', label: 'IF', onClick: () => handleInsertAction('IF') },
+        { id: 'insert-error', label: 'Error', onClick: () => handleInsertAction('ERROR') },
+        { type: 'divider' },
+        { id: 'insert-set', label: 'Set', onClick: () => handleInsertAction('SET') },
+        { id: 'insert-math', label: 'Math', onClick: () => handleInsertAction('MATH') },
+        { type: 'divider' },
+        { id: 'insert-external', label: 'External', onClick: () => handleInsertAction('EXTERNAL') },
+        { id: 'insert-template', label: 'Template', onClick: () => handleInsertAction('TEMPLATE') }
+      ]
+    });
 
-      // Create submenu items for each category
-      const insertSubmenus: MenuItem[] = Object.entries(categorizedComponents).map(([category, items]) => ({
-        id: `insert-category-${category}`,
-        label: category,
-        submenu: items
-      }));
-
+    // Add the main menu items as a single section
+    if (mainMenuItems.length > 0) {
       sections.push({
-        title: 'Insert',
-        items: insertSubmenus
+        title: '',
+        items: mainMenuItems
       });
     }
 
     return sections;
   }, [
-    targetComponentId, 
-    targetComponent, 
-    selectedComponents, 
-    canvasPosition,
-    handleSelectAction,
+    targetComponentId,
+    targetComponent,
+    selectedComponents,
+    currentSectionComponents,
     handleEditAction,
     handleInsertAction,
-    getComponentTemplate
+    selectComponents,
+    clearSelection,
+    onClose
   ]);
 
   if (!position) return null;
@@ -271,75 +386,104 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 bg-vscode-menu-background border border-vscode-menu-border rounded-md shadow-lg min-w-48 py-1"
+      className="fixed z-50 border border-vscode-menu-border rounded-md shadow-lg min-w-48 py-1.5 transition-all duration-150 ease-out transform origin-top-left bg-vscode-menu-background"
       style={{
         left: position.x,
         top: position.y,
       }}
     >
-      {menuSections.map((section, sectionIndex) => (
-        <div key={section.title}>
-          {/* Section Header */}
-          <div className="px-3 py-1 text-xs font-semibold text-vscode-menu-separatorBackground uppercase tracking-wide">
-            {section.title}
-          </div>
-          
-          {/* Section Items */}
-          {section.items.map((item) => (
-            <div key={item.id} className="relative">
-              <button
-                className={`
-                  w-full px-3 py-2 text-left text-sm flex items-center justify-between
-                  text-vscode-menu-foreground hover:bg-vscode-menu-selectionBackground
-                  disabled:opacity-50 disabled:cursor-not-allowed
-                  ${item.disabled ? '' : 'hover:text-vscode-menu-selectionForeground'}
-                `}
-                disabled={item.disabled}
-                onClick={item.submenu ? undefined : item.onClick}
-                onMouseEnter={() => item.submenu ? setActiveSubmenu(item.id) : setActiveSubmenu(null)}
-              >
-                <div className="flex items-center space-x-2">
-                  {item.icon && (
-                    <span className="flex-shrink-0">
-                      {item.icon}
-                    </span>
-                  )}
-                  <span>{item.label}</span>
-                </div>
-                
-                {item.submenu && (
-                  <svg className="w-4 h-4 ml-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"/>
-                  </svg>
-                )}
-              </button>
-              
-              {/* Submenu */}
-              {item.submenu && activeSubmenu === item.id && (
-                <div
-                  className="absolute left-full top-0 ml-1 bg-vscode-menu-background border border-vscode-menu-border rounded-md shadow-lg min-w-40 py-1 z-10"
-                  onMouseLeave={() => setActiveSubmenu(null)}
-                >
-                  {item.submenu.map((subItem) => (
+      <div className="rounded-md">
+        {menuSections.map((section, sectionIndex) => (
+          <div key={section.title || sectionIndex}>
+            {section.title && (
+              <div className="px-4 py-1.5 text-[11px] font-medium text-vscode-descriptionForeground uppercase tracking-wider">
+                {section.title}
+              </div>
+            )}
+            
+            {section.items.map((item) => (
+              <div key={item.id || `divider-${Math.random()}`} className="relative group">
+                {item.type === 'divider' ? (
+                  <div className="my-1.5 mx-2 border-t border-vscode-menu-separatorBackground" />
+                ) : (
+                  <>
                     <button
-                      key={subItem.id}
-                      className="w-full px-3 py-2 text-left text-sm text-vscode-menu-foreground hover:bg-vscode-menu-selectionBackground hover:text-vscode-menu-selectionForeground"
-                      onClick={subItem.onClick}
+                      className={`
+                        w-full px-4 py-1.5 text-left text-sm flex items-center justify-between
+                        text-vscode-menu-foreground hover:bg-vscode-menu-selectionBackground
+                        disabled:opacity-50 disabled:cursor-not-allowed
+                        ${item.disabled ? '' : 'hover:text-vscode-menu-selectionForeground'}
+                      `}
+                      disabled={item.disabled}
+                      onClick={item.submenu ? undefined : (e) => {
+                        e.stopPropagation();
+                        item.onClick?.();
+                      }}
+                      onMouseEnter={() => item.submenu ? setActiveSubmenu(item.id) : setActiveSubmenu(null)}
                     >
-                      {subItem.label}
+                      <div className="flex items-center space-x-2">
+                        {item.icon && (
+                          <span className="flex-shrink-0">
+                            {item.icon}
+                          </span>
+                        )}
+                        <span>{item.label}</span>
+                      </div>
+                      {item.submenu && (
+                        <svg className="w-4 h-4 ml-2" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"/>
+                        </svg>
+                      )}
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-          
-          {/* Section Separator */}
-          {sectionIndex < menuSections.length - 1 && (
-            <div className="my-1 border-t border-vscode-menu-separatorBackground" />
-          )}
-        </div>
-      ))}
+                    
+                    {item.submenu && activeSubmenu === item.id && (
+                      <div
+                        className="absolute left-full top-0 ml-1 bg-vscode-menu-background border border-vscode-menu-border rounded-md shadow-lg min-w-40 py-1.5 z-10"
+                        onMouseEnter={() => setActiveSubmenu(item.id)}
+                        onMouseLeave={() => setActiveSubmenu(null)}
+                      >
+                        {item.submenu.map((subItem) => (
+                          <div key={subItem.id || `subdivider-${Math.random()}`}>
+                            {subItem.type === 'divider' ? (
+                              <div className="my-1.5 mx-2 border-t border-vscode-menu-separatorBackground" />
+                            ) : (
+                              <button
+                                className={`
+                                  w-full px-4 py-1.5 text-left text-sm flex items-center
+                                  text-vscode-menu-foreground hover:bg-vscode-menu-selectionBackground
+                                  hover:text-vscode-menu-selectionForeground
+                                  ${subItem.disabled ? 'opacity-50 cursor-not-allowed' : ''}
+                                `}
+                                disabled={subItem.disabled}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  subItem.onClick?.();
+                                  onClose();
+                                }}
+                              >
+                                {subItem.icon && (
+                                  <span className="w-4 h-4 mr-2 flex-shrink-0">
+                                    {subItem.icon}
+                                  </span>
+                                )}
+                                <span>{subItem.label}</span>
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+            
+            {sectionIndex < menuSections.length - 1 && section.items.length > 0 && (
+              <div className="my-1.5 mx-2 border-t border-vscode-menu-separatorBackground" />
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

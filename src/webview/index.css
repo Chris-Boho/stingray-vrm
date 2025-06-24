@@ -82,6 +82,10 @@ body {
   .bg-vscode-button-background {
     background-color: var(--vscode-button-background);
   }
+
+  .bg-vscode-menu-background {
+    background-color: #424753;
+  }
   
   .text-vscode-foreground {
     color: var(--vscode-foreground);

@@ -24,6 +24,7 @@ import { useConnectionStore } from '../../stores/connectionStore';
 import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
 import StingrayEdge from './StingrayEdge';
+import { ContextMenu } from './ContextMenu';
 
 // Define custom edge types
 const edgeTypes = {
@@ -33,6 +34,12 @@ const edgeTypes = {
 interface WorkflowCanvasProps {
   section: SectionType;
   className?: string;
+}
+
+interface ContextMenuState {
+  position: { x: number; y: number } | null;
+  targetComponentId?: number;
+  canvasPosition?: { x: number; y: number };
 }
 
 // Convert VRM component to ReactFlow node
@@ -107,6 +114,13 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     updateTempConnection, 
     tempConnection 
   } = useConnectionStore();
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+    position: null,
+    targetComponentId: undefined,
+    canvasPosition: undefined
+  });
 
   // Debug: Log current selection state
   useEffect(() => {
@@ -197,6 +211,9 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   }, [selectComponents]);
 
   const onPaneClick = useCallback((event: React.MouseEvent) => {
+    // Close context menu on any click
+    setContextMenu({ position: null });
+    
     // Check if we clicked on a node - if so, don't clear selection
     const target = event.target as HTMLElement;
     const clickedOnNode = target.closest('.react-flow__node');
@@ -217,13 +234,25 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     clearSelection();
   }, [clearSelection, isCreating, cancelConnection]);
 
-  const onViewportChange = useCallback((viewport: { x: number; y: number; zoom: number }) => {
-    setZoom(viewport.zoom);
-    setPan({ x: viewport.x, y: viewport.y });
-  }, [setZoom, setPan]);
+  const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
+    event.preventDefault();
+    
+    // Get the canvas position for potential component insertion
+    const canvasPosition = reactFlowInstance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+    
+    setContextMenu({
+      position: { x: event.clientX, y: event.clientY },
+      targetComponentId: undefined,
+      canvasPosition
+    });
+    
+    console.log('📋 Canvas context menu opened at:', canvasPosition);
+  }, [reactFlowInstance]);
 
-  // Mouse move handler for connection preview
-  const onMouseMove = useCallback((event: React.MouseEvent) => {
+  const onPaneMouseMove = useCallback((event: React.MouseEvent) => {
     if (isCreating) {
       // Update temp connection position
       const position = reactFlowInstance.screenToFlowPosition({
@@ -234,13 +263,43 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     }
   }, [isCreating, updateTempConnection, reactFlowInstance]);
 
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const componentId = parseInt(node.id);
+    
+    setContextMenu({
+      position: { x: event.clientX, y: event.clientY },
+      targetComponentId: componentId,
+      canvasPosition: undefined
+    });
+    
+    console.log('📋 Node context menu opened for component:', componentId);
+  }, []);
+
+  const closeContextMenu = useCallback(() => {
+    setContextMenu({ position: null });
+  }, []);
+
+  const onViewportChange = useCallback((viewport: { x: number; y: number; zoom: number }) => {
+    setZoom(viewport.zoom);
+    setPan({ x: viewport.x, y: viewport.y });
+  }, [setZoom, setPan]);
+
   // Keyboard handler for ESC key
   const onKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key === 'Escape' && isCreating) {
-      cancelConnection();
-      console.log('Connection cancelled with ESC key');
+    if (event.key === 'Escape') {
+      if (isCreating) {
+        cancelConnection();
+        console.log('Connection cancelled with ESC key');
+      }
+      if (contextMenu.position) {
+        closeContextMenu();
+        console.log('Context menu closed with ESC key');
+      }
     }
-  }, [isCreating, cancelConnection]);
+  }, [isCreating, cancelConnection, contextMenu.position, closeContextMenu]);
 
   // Drop handling
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -354,11 +413,20 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
+        onContextMenu={onPaneContextMenu}
       >
         <div className="text-center space-y-2">
           <div className="text-vscode-foreground">No components in {section} section</div>
           <div className="text-sm text-vscode-secondary">Drag components from the palette to add them</div>
         </div>
+        
+        {/* Context Menu */}
+        <ContextMenu
+          position={contextMenu.position}
+          onClose={closeContextMenu}
+          targetComponentId={contextMenu.targetComponentId}
+          canvasPosition={contextMenu.canvasPosition}
+        />
       </div>
     );
   }
@@ -378,17 +446,15 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           edges={edges}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
-          // onNodeDragStart={(event, node) => console.log('🎯 Drag start:', node.id)}
-          // onNodeDrag={(event, node) => console.log('🎯 Dragging:', node.id)}
-          // onNodeDragStop={(event, node) => console.log('🎯 Drag stop:', node.id, node.position)}
-          // onNodeMouseEnter={(event, node) => console.log('🐭 Mouse enter:', node.id, ', Current selectedComponents in store:', selectedComponents)}
-          // onNodeMouseLeave={(event, node) => console.log('🐭 Mouse leave:', node.id)}
+          onNodeMouseEnter={(event, node) => console.log('🐭 Mouse enter:', node.id, ', Current selectedComponents in store:', selectedComponents)}
           onNodesChange={onNodesChangeHandler}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onSelectionChange={onSelectionChange}
           onPaneClick={onPaneClick}
-          onPaneMouseMove={onMouseMove}
+          onPaneContextMenu={onPaneContextMenu}
+          onNodeContextMenu={onNodeContextMenu}
+          onPaneMouseMove={onPaneMouseMove}
           onViewportChange={onViewportChange}
           onDrop={onDrop}
           onDragOver={onDragOver}
@@ -397,20 +463,13 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           selectNodesOnDrag={false}
           selectionOnDrag={true}
           panOnDrag={false}
-          panOnScroll={true}  // Add this
-          zoomOnScroll={true}  // Add this
-          preventScrolling={true}  // Add this
+          panOnScroll={true}
+          zoomOnScroll={true}
+          preventScrolling={true}
           minZoom={0.1}
           maxZoom={3}
           snapToGrid={grid.snapToGrid}
           snapGrid={[grid.cellSize.x, grid.cellSize.y]}
-          // fitView
-          // fitViewOptions={{ 
-          //   padding: 0.2,
-          //   includeHiddenNodes: false,
-          //   minZoom: 0.5,
-          //   maxZoom: 1.5 
-          // }}
           translateExtent={[
             [0, 0],
             [canvasSize.width, canvasSize.height]
@@ -507,6 +566,14 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           )}
         </ReactFlow>
       </div>
+
+      {/* Context Menu */}
+      <ContextMenu
+        position={contextMenu.position}
+        onClose={closeContextMenu}
+        targetComponentId={contextMenu.targetComponentId}
+        canvasPosition={contextMenu.canvasPosition}
+      />
 
       {/* Connection Mode Instructions */}
       {isCreating && (
