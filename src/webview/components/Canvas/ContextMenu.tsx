@@ -97,7 +97,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   }, [position, onClose]);
 
   // Handle menu item selection
-  const handleSelectAction = useCallback((action: string) => {
+  const handleSelectAction = useCallback((action: string, canvasPosition?: { x: number; y: number }) => {
     const reactFlowState = store.getState();
     
     switch (action) {
@@ -105,12 +105,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         // Get all component IDs in current section
         const allComponentIds = currentSectionComponents.map(c => c.n);
         const allNodeIds = allComponentIds.map(id => id.toString());
-        
-        console.log('Select All triggered:', {
-          section: activeSection,
-          componentCount: allComponentIds.length,
-          nodeIds: allNodeIds
-        });
         
         // Clear our store first
         clearSelection();
@@ -120,8 +114,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         
         // Update our store with all component IDs
         selectAll(allComponentIds);
-        
-        console.log('Select All completed');
         break;
         
       case 'select-clear':
@@ -130,6 +122,36 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         
         // Clear our store
         clearSelection();
+        break;
+      
+      case 'select-all-above':
+        if (!canvasPosition) return;
+        // Get component IDs above cursor
+        const aboveComponentIds = currentSectionComponents.filter(c => c.y < canvasPosition.y).map(c => c.n);
+        
+        // Clear our store first
+        clearSelection();
+        
+        // Update React Flow selection with all nodes
+        reactFlowState.addSelectedNodes(aboveComponentIds.map(id => id.toString()));
+        
+        // Update our store with all component IDs
+        selectComponents(aboveComponentIds);
+        break;
+
+      case 'select-all-below':
+        if (!canvasPosition) return;
+        // Get component IDs below cursor
+        const belowComponentIds = currentSectionComponents.filter(c => c.y > canvasPosition.y).map(c => c.n);
+        
+        // Clear our store first
+        clearSelection();
+        
+        // Update React Flow selection with all nodes
+        reactFlowState.addSelectedNodes(belowComponentIds.map(id => id.toString()));
+        
+        // Update our store with all component IDs
+        selectComponents(belowComponentIds);
         break;
     }
     onClose();
@@ -220,28 +242,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         {
           id: 'select-all-above',
           label: 'All Above',
-          disabled: !targetComponentId,
           onClick: () => {
-            if (!targetComponentId) return;
-            const currentIndex = currentSectionComponents.findIndex(c => c.n === targetComponentId);
-            if (currentIndex > 0) {
-              const componentsAbove = currentSectionComponents.slice(0, currentIndex);
-              selectComponents(componentsAbove.map(c => c.n));
-            }
-            onClose();
+            handleSelectAction('select-all-above', canvasPosition)
+            // onClose();
           }
         },
         {
           id: 'select-all-below',
           label: 'All Below',
-          disabled: !targetComponentId,
           onClick: () => {
-            if (!targetComponentId) return;
-            const currentIndex = currentSectionComponents.findIndex(c => c.n === targetComponentId);
-            if (currentIndex < currentSectionComponents.length - 1) {
-              const componentsBelow = currentSectionComponents.slice(currentIndex + 1);
-              selectComponents(componentsBelow.map(c => c.n));
-            }
+            handleSelectAction('select-all-below')
             onClose();
           }
         }
