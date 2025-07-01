@@ -140,14 +140,7 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
   const colors = getComponentColor(type);
   const abbreviation = getComponentAbbreviation(type);
   const isComponentSelected = isSelected(component.n);
-
-    // Debug logging
-    // useEffect(() => {
-    //   if (selected || isComponentSelected) {
-    //     console.log(`🔲 Component ${component.n}: ReactFlow selected=${selected}, store selected=${isComponentSelected}`);
-    //   }
-    // }, [selected, isComponentSelected, component.n]);
-
+  
   // Truncate long comments
   const maxCommentLength = 35;
   const truncatedComment = component.c && component.c.length > maxCommentLength 
@@ -198,7 +191,7 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
         onClick={onComponentClick}
         onContextMenu={onComponentContextMenu}
         onDoubleClick={handleDoubleClick}
-        title={`${component.n}: ${component.c || type}\n\nWith component selected:\nAlt+Click: Primary connection\nAlt+Right Click: Secondary connection`}
+        title={`${component.n}: ${component.c || type}\n\nWith component selected:\nAlt+Click: Primary connection\nAlt+Right Click: Secondary connection`} 
       >
         {/* Component Type Abbreviation */}
         <div className="absolute left-0 top-0 bottom-0 flex items-center px-2 z-10">

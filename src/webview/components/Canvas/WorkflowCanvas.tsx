@@ -187,23 +187,44 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     [setEdges]
   );
 
-  const onNodesChangeHandler = useCallback((changes: any[]) => {
-    // Handle position changes to update VRM data
-    changes.forEach(change => {
-      if (change.type === 'position' && change.position && !change.dragging) {
-        // Update VRM component position when drag ends
+  // In WorkflowCanvas.tsx, replace the onNodesChangeHandler callback:
+
+const onNodesChangeHandler = useCallback((changes: any[]) => {
+  // Process changes with boundary protection
+  const processedChanges = changes.map(change => {
+    if (change.type === 'position' && change.position) {
+      // Enforce boundary constraints - prevent moving below 0,0
+      const constrainedPosition = {
+        x: Math.max(0, change.position.x),
+        y: Math.max(0, change.position.y)
+      };
+      
+      // If position was constrained, update the change
+      if (constrainedPosition.x !== change.position.x || constrainedPosition.y !== change.position.y) {
+        console.log(`Constraining component ${change.id} position from (${change.position.x}, ${change.position.y}) to (${constrainedPosition.x}, ${constrainedPosition.y})`);
+        return {
+          ...change,
+          position: constrainedPosition
+        };
+      }
+      
+      // Update VRM component position when drag ends
+      if (!change.dragging) {
         const componentId = parseInt(change.id);
         const documentStore = useDocumentStore.getState();
         documentStore.updateComponent(componentId, {
-          x: Math.round(change.position.x),
-          y: Math.round(change.position.y)
+          x: Math.round(constrainedPosition.x),
+          y: Math.round(constrainedPosition.y)
         });
       }
-    });
+    }
     
-    // Apply the changes to ReactFlow
-    onNodesChange(changes);
-  }, [onNodesChange]);
+    return change;
+  });
+  
+  // Apply the processed changes to ReactFlow
+  onNodesChange(processedChanges);
+}, [onNodesChange]);
 
   const onSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     const selectedNodeIds = params.nodes.map(node => parseInt(node.id));
@@ -382,7 +403,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
         return newNode;
       });
     });
-  }, [setNodes]); // DO NOT include selectedComponents
+  }, [sectionComponents, setNodes]); // DO NOT include selectedComponents
 
   useEffect(() => {
     const newEdges = convertConnectionsToEdges(sectionComponents);
@@ -459,15 +480,15 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           onDrop={onDrop}
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
-          defaultViewport={{ x: pan.x, y: pan.y, zoom }}
+          defaultViewport={{ x: pan.x, y: pan.y, zoom: 1.25 }}
           selectNodesOnDrag={false}
           selectionOnDrag={true}
           panOnDrag={false}
           panOnScroll={true}
-          zoomOnScroll={true}
+          zoomOnScroll={false}
           preventScrolling={true}
-          minZoom={0.1}
-          maxZoom={3}
+          // minZoom={0.1}
+          // maxZoom={2}
           snapToGrid={grid.snapToGrid}
           snapGrid={[grid.cellSize.x, grid.cellSize.y]}
           translateExtent={[
@@ -488,10 +509,11 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
             size={2}
             color={grid.showGrid ? 'var(--vscode-panel-border)' : 'transparent'}
           />
+          
           <Controls
             position="top-right"
-            showZoom={true}
-            showFitView={true}
+            showZoom={false}
+            showFitView={false}
             showInteractive={true}
             style={{
               backgroundColor: 'var(--vscode-editor-background)',

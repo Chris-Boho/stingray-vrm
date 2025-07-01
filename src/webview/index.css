@@ -29,6 +29,9 @@ html, body, #root {
   overflow: hidden; /* Only hide overflow in the canvas area */
 }
 
+.react-flow__nodesselection-rect {
+  display: none;
+}
 /* Ensure proper scrolling for text content areas */
 .text-content {
   overflow: auto;

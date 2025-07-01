@@ -197,27 +197,34 @@ export const useComponentStore = create<ComponentStoreState>()(
     },
 
     createComponent: (type: ComponentType, position: { x: number; y: number }, section: SectionType) => {
-      const template = get().getComponentTemplate(type);
-      const nextId = get().getNextComponentId();
-      const snappedPosition = get().snapToGrid(position);
-      
-      const newComponent: VrmComponent = {
-        n: nextId,
-        t: type,
-        values: template?.defaultValues || {},
-        j: [0, 0], // No connections initially
-        x: snappedPosition.x,
-        y: snappedPosition.y,
-        c: template?.label || type, // Default comment
-        wp: null, // No watchpoint initially
-        section
-      };
+    const template = get().getComponentTemplate(type);
+    const nextId = get().getNextComponentId();
+    
+    // Apply boundary constraints before snapping to grid
+    const constrainedPosition = {
+      x: Math.max(0, position.x),
+      y: Math.max(0, position.y)
+    };
+    
+    const snappedPosition = get().snapToGrid(constrainedPosition);
+    
+    const newComponent: VrmComponent = {
+      n: nextId,
+      t: type,
+      values: template?.defaultValues || {},
+      j: [0, 0], // No connections initially
+      x: snappedPosition.x,
+      y: snappedPosition.y,
+      c: template?.label || type, // Default comment
+      wp: null, // No watchpoint initially
+      section
+    };
 
-      // Add to document store
-      useDocumentStore.getState().addComponent(newComponent);
-      
-      return newComponent;
-    },
+    // Add to document store
+    useDocumentStore.getState().addComponent(newComponent);
+    
+    return newComponent;
+  },
 
     duplicateComponent: (componentId: number) => {
       const documentStore = useDocumentStore.getState();
@@ -240,7 +247,13 @@ export const useComponentStore = create<ComponentStoreState>()(
     },
 
     moveComponent: (componentId: number, position: { x: number; y: number }) => {
-      const snappedPosition = get().snapToGrid(position);
+      // Apply boundary constraints
+      const constrainedPosition = {
+        x: Math.max(0, position.x),
+        y: Math.max(0, position.y)
+      };
+      
+      const snappedPosition = get().snapToGrid(constrainedPosition);
       useDocumentStore.getState().updateComponent(componentId, {
         x: snappedPosition.x,
         y: snappedPosition.y
@@ -250,14 +263,36 @@ export const useComponentStore = create<ComponentStoreState>()(
     moveComponents: (componentIds: number[], deltaX: number, deltaY: number) => {
       const documentStore = useDocumentStore.getState();
       
+      // First, check if any component would go out of bounds
+      const allComponents = [...(documentStore.document?.preproc || []), ...(documentStore.document?.postproc || [])];
+      let constrainedDeltaX = deltaX;
+      let constrainedDeltaY = deltaY;
+      
+      // Find the minimum allowed deltas to keep all components in bounds
       componentIds.forEach(componentId => {
-        const allComponents = [...(documentStore.document?.preproc || []), ...(documentStore.document?.postproc || [])];
+        const component = allComponents.find(c => c.n === componentId);
+        if (component) {
+          const newX = component.x + deltaX;
+          const newY = component.y + deltaY;
+          
+          // If this would take the component below 0, adjust the delta
+          if (newX < 0) {
+            constrainedDeltaX = Math.max(constrainedDeltaX, -component.x);
+          }
+          if (newY < 0) {
+            constrainedDeltaY = Math.max(constrainedDeltaY, -component.y);
+          }
+        }
+      });
+      
+      // Now move all components with the constrained deltas
+      componentIds.forEach(componentId => {
         const component = allComponents.find(c => c.n === componentId);
         
         if (component) {
           const newPosition = {
-            x: component.x + deltaX,
-            y: component.y + deltaY
+            x: component.x + constrainedDeltaX,
+            y: component.y + constrainedDeltaY
           };
           const snappedPosition = get().snapToGrid(newPosition);
           
