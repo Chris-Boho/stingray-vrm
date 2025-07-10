@@ -13,6 +13,7 @@ import {
   BackgroundVariant,
   Panel,
   useReactFlow,
+  useStoreApi
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 
@@ -129,6 +130,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   
   // Use React Flow instance for coordinate conversion
   const reactFlowInstance = useReactFlow();
+  const store = useStoreApi();
   
   // State for drag over effect
   const [isDragOver, setIsDragOver] = useState(false);
@@ -314,13 +316,33 @@ const onNodesChangeHandler = useCallback((changes: any[]) => {
       if (isCreating) {
         cancelConnection();
         console.log('Connection cancelled with ESC key');
+        return;
       }
       if (contextMenu.position) {
         closeContextMenu();
         console.log('Context menu closed with ESC key');
+        return;
+      }
+      const currentSelection = useSelectionStore.getState().selectedComponents;
+      if (currentSelection.length > 0) {
+        // Clear ReactFlow selection first
+        const reactFlowState = store.getState();
+        reactFlowState.addSelectedNodes([]);
+        
+        // Then clear our store selection
+        clearSelection();
+        console.log('Selection cleared with ESC key');
+        return;
       }
     }
-  }, [isCreating, cancelConnection, contextMenu.position, closeContextMenu]);
+  }, [isCreating, 
+    cancelConnection, 
+    contextMenu.position, 
+    closeContextMenu, 
+    clearSelection,
+    sectionComponents,
+    selectComponents,
+    store]);
 
   // Drop handling
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -487,8 +509,8 @@ const onNodesChangeHandler = useCallback((changes: any[]) => {
           panOnScroll={true}
           zoomOnScroll={false}
           preventScrolling={true}
-          // minZoom={0.1}
-          // maxZoom={2}
+          minZoom={1}
+          maxZoom={2}
           snapToGrid={grid.snapToGrid}
           snapGrid={[grid.cellSize.x, grid.cellSize.y]}
           translateExtent={[

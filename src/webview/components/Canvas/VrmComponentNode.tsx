@@ -167,7 +167,7 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
         type="target"
         position={Position.Top}
         id="input"
-        className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-vscode-button-background !rounded-full"
+        className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-vscode-button-background !rounded-full !pointer-events-none !cursor-default"
         style={{
           top: -6,
           left: '50%',
@@ -225,7 +225,7 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
           type="source"
           position={Position.Bottom}
           id="output"
-          className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-gray-500 !rounded-full"
+          className="!w-3 !h-3 !border-2 !border-vscode-button-border !bg-gray-500 !rounded-full !pointer-events-none !cursor-default"
           style={{
             bottom: -6,
             left: '50%',
