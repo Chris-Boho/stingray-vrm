@@ -4,6 +4,7 @@ import { SectionType } from '../../types/vrm';
 import { useDocumentStore } from '../../stores/documentStore';
 import { useEditorStore } from '../../stores/editorStore';
 import { useSelectedCount } from '../../stores/selectionStore';
+import { useClipboardOperations, useHasClipboardData, useClipboardInfo } from '../../stores/clipboardStore';
 import { DragDropLayout } from '../Canvas/DndProvider';
 import { WorkflowCanvas } from '../Canvas/WorkflowCanvas';
 
@@ -16,6 +17,9 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
   const { document, isLoading, isDirty } = useDocumentStore();
   const { activeSection, setActiveSection } = useEditorStore();
   const selectedCount = useSelectedCount();
+  const { copySelected, pasteAtCenter, canPaste } = useClipboardOperations();
+  const hasClipboardData = useHasClipboardData();
+  const clipboardInfo = useClipboardInfo();
 
   // Get component counts for each section
   const preprocCount = document?.preproc?.length || 0;
@@ -33,6 +37,21 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
   const handleSave = () => {
     // TODO: Implement save functionality
     console.log('Save requested');
+  };
+
+  // Clipboard action handlers
+  const handleCopy = () => {
+    if (selectedCount > 0) {
+      copySelected();
+      console.log(`📋 Copied ${selectedCount} components from toolbar`);
+    }
+  };
+
+  const handlePaste = () => {
+    if (canPaste) {
+      pasteAtCenter();
+      console.log('📋 Pasted components from toolbar');
+    }
   };
 
   const getSectionDisplayName = (section: SectionType) => {
@@ -71,6 +90,54 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
 
         {/* Toolbar Actions */}
         <div className="flex items-center space-x-2">
+          {/* Clipboard Actions */}
+          <div className="flex items-center space-x-1 mr-2">
+            <button
+              onClick={handleCopy}
+              disabled={selectedCount === 0}
+              className="px-2 py-1 text-xs bg-vscode-button-background border border-vscode-button-border 
+                         text-vscode-button-foreground rounded hover:bg-vscode-button-hoverBackground
+                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+              title={`Copy selected components (${selectedCount}) - Ctrl+C`}
+            >
+              <div className="flex items-center space-x-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+                <span>Copy</span>
+                {selectedCount > 0 && (
+                  <span className="text-xs bg-vscode-badge-background text-vscode-badge-foreground px-1 rounded">
+                    {selectedCount}
+                  </span>
+                )}
+              </div>
+            </button>
+
+            <button
+              onClick={handlePaste}
+              disabled={!canPaste}
+              className="px-2 py-1 text-xs bg-vscode-button-background border border-vscode-button-border 
+                         text-vscode-button-foreground rounded hover:bg-vscode-button-hoverBackground
+                         disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-150"
+              title={hasClipboardData ? `Paste ${clipboardInfo} - Ctrl+V` : 'No components to paste'}
+            >
+              <div className="flex items-center space-x-1">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span>Paste</span>
+                {hasClipboardData && (
+                  <svg className="w-2 h-2 text-blue-400" fill="currentColor" viewBox="0 0 8 8">
+                    <circle cx="4" cy="4" r="3"/>
+                  </svg>
+                )}
+              </div>
+            </button>
+          </div>
+
+          {/* Divider */}
+          <div className="h-6 w-px bg-vscode-border"></div>
+
           {/* Palette Toggle */}
           <button
             onClick={handleTogglePalette}
@@ -219,6 +286,22 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
               </span>
             </>
           )}
+
+          {/* Clipboard info */}
+          {hasClipboardData && (
+            <>
+              <span className="text-vscode-statusBar-foreground opacity-50">•</span>
+              <div className="flex items-center space-x-1">
+                <svg className="w-3 h-3 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M8 2a1 1 0 000 2h2a1 1 0 100-2H8z"/>
+                  <path d="M3 5a2 2 0 012-2 3 3 0 003 3h4a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2-2H5a2 2 0 01-2-2V5z"/>
+                </svg>
+                <span className="text-blue-400">
+                  {clipboardInfo}
+                </span>
+              </div>
+            </>
+          )}
           
           {/* File status */}
           {document && isDirty && (
@@ -233,6 +316,15 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
 
         {/* Right side status items */}
         <div className="ml-auto flex items-center space-x-4">
+          {/* Clipboard shortcuts hint */}
+          {(selectedCount > 0 || hasClipboardData) && (
+            <span className="text-vscode-statusBar-foreground text-xs opacity-75">
+              {selectedCount > 0 && hasClipboardData && 'Ctrl+C: Copy • Ctrl+V: Paste'}
+              {selectedCount > 0 && !hasClipboardData && 'Ctrl+C: Copy • Ctrl+A: Select All'}
+              {selectedCount === 0 && hasClipboardData && 'Ctrl+V: Paste • Right-click: Context menu'}
+            </span>
+          )}
+
           {/* Component palette status */}
           <span className="text-vscode-statusBar-foreground">
             Palette: {isPaletteCollapsed ? 'Hidden' : 'Visible'}
@@ -240,7 +332,7 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
           
           {/* Phase indicator */}
           <span className="text-vscode-statusBar-foreground">
-            Phase 4: Component Interactions
+            Phase 4: Copy & Paste ✨
           </span>
         </div>
       </footer>

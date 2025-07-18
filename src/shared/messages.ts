@@ -1,3 +1,5 @@
+import { VrmComponent, SectionType } from '../webview/types/vrm';
+
 // Base message interface
 export interface BaseMessage {
     type: string;
@@ -6,7 +8,7 @@ export interface BaseMessage {
   
   // Messages sent from Extension to Webview
   export interface ExtensionToWebviewMessage extends BaseMessage {
-    type: 'update' | 'theme-changed' | 'settings-changed';
+    type: 'update' | 'theme-changed' | 'settings-changed' | 'clipboard-status' | 'clipboard-data' | 'paste-error';
   }
   
   export interface UpdateMessage extends ExtensionToWebviewMessage {
@@ -24,10 +26,32 @@ export interface BaseMessage {
     type: 'settings-changed';
     settings: VrmEditorSettings;
   }
+
+  export interface ClipboardStatusMessage extends ExtensionToWebviewMessage {
+    type: 'clipboard-status';
+    hasData: boolean;
+    componentCount: number;
+    sourceFile?: string;
+  }
+
+  export interface ClipboardDataMessage extends ExtensionToWebviewMessage {
+    type: 'clipboard-data';
+    data: {
+      components: VrmComponent[];
+      copyOrigin: { x: number; y: number };
+      targetPosition: { x: number; y: number };
+      section: SectionType;
+    };
+  }
+
+  export interface PasteErrorMessage extends ExtensionToWebviewMessage {
+    type: 'paste-error';
+    error: string;
+  }
   
   // Messages sent from Webview to Extension
   export interface WebviewToExtensionMessage extends BaseMessage {
-    type: 'ready' | 'save' | 'error' | 'log';
+    type: 'ready' | 'save' | 'error' | 'log' | 'copy-components' | 'paste-components' | 'get-clipboard-status' | 'clear-clipboard';
   }
   
   export interface ReadyMessage extends WebviewToExtensionMessage {
@@ -51,6 +75,26 @@ export interface BaseMessage {
     message: string;
     data?: any;
   }
+
+  export interface CopyComponentsMessage extends WebviewToExtensionMessage {
+    type: 'copy-components';
+    components: VrmComponent[];
+    copyOrigin: { x: number; y: number };
+  }
+
+  export interface PasteComponentsMessage extends WebviewToExtensionMessage {
+    type: 'paste-components';
+    targetPosition: { x: number; y: number };
+    section: SectionType;
+  }
+
+  export interface GetClipboardStatusMessage extends WebviewToExtensionMessage {
+    type: 'get-clipboard-status';
+  }
+
+  export interface ClearClipboardMessage extends WebviewToExtensionMessage {
+    type: 'clear-clipboard';
+  }
   
   // Settings interface
   export interface VrmEditorSettings {
@@ -67,8 +111,23 @@ export interface BaseMessage {
   }
   
   // Union types for type safety
-  export type ExtensionMessage = UpdateMessage | ThemeChangedMessage | SettingsChangedMessage;
-  export type WebviewMessage = ReadyMessage | SaveMessage | ErrorMessage | LogMessage;
+  export type ExtensionMessage = 
+    | UpdateMessage 
+    | ThemeChangedMessage 
+    | SettingsChangedMessage 
+    | ClipboardStatusMessage 
+    | ClipboardDataMessage 
+    | PasteErrorMessage;
+
+  export type WebviewMessage = 
+    | ReadyMessage 
+    | SaveMessage 
+    | ErrorMessage 
+    | LogMessage 
+    | CopyComponentsMessage 
+    | PasteComponentsMessage 
+    | GetClipboardStatusMessage 
+    | ClearClipboardMessage;
   
   // Message handler types
   export type ExtensionMessageHandler = (message: WebviewMessage) => void;

@@ -4,8 +4,13 @@ import type {
   ReadyMessage, 
   SaveMessage, 
   ErrorMessage, 
-  LogMessage 
+  LogMessage,
+  CopyComponentsMessage,
+  PasteComponentsMessage,
+  GetClipboardStatusMessage,
+  ClearClipboardMessage
 } from '../../shared/messages';
+import { VrmComponent, SectionType } from '../types/vrm';
 
 // More type-safe VS Code webview API interface
 interface VsCodeApi<T = unknown> {
@@ -88,7 +93,9 @@ class VscodeService {
   }
 
   public offMessage(type: string, handler?: (message: ExtensionMessage) => void) {
-    if (!this.handlers.has(type)) return;
+    if (!this.handlers.has(type)) {
+      return;
+    }
     
     if (handler) {
       const handlers = this.handlers.get(type)!;
@@ -137,6 +144,114 @@ class VscodeService {
       timestamp: Date.now()
     };
     this.vscode.postMessage(logMessage);
+  }
+
+  // Clipboard-related message senders
+  public sendCopyComponents(components: VrmComponent[], copyOrigin: { x: number; y: number }) {
+    const message: CopyComponentsMessage = {
+      type: 'copy-components',
+      components,
+      copyOrigin,
+      timestamp: Date.now()
+    };
+    
+    console.log(`Sending copy-components message: ${components.length} components`);
+    this.vscode.postMessage(message);
+  }
+
+  public sendPasteComponents(targetPosition: { x: number; y: number }, section: SectionType) {
+    const message: PasteComponentsMessage = {
+      type: 'paste-components',
+      targetPosition,
+      section,
+      timestamp: Date.now()
+    };
+    
+    console.log(`Sending paste-components message at (${targetPosition.x}, ${targetPosition.y}) in ${section}`);
+    this.vscode.postMessage(message);
+  }
+
+  public sendGetClipboardStatus() {
+    const message: GetClipboardStatusMessage = {
+      type: 'get-clipboard-status',
+      timestamp: Date.now()
+    };
+    
+    console.log('Requesting clipboard status from extension');
+    this.vscode.postMessage(message);
+  }
+
+  public sendClearClipboard() {
+    const message: ClearClipboardMessage = {
+      type: 'clear-clipboard',
+      timestamp: Date.now()
+    };
+    
+    console.log('Sending clear clipboard request');
+    this.vscode.postMessage(message);
+  }
+
+  // Generic postMessage method for direct message passing
+  public postMessage(message: WebviewMessage) {
+    console.log('Sending message to extension:', message.type);
+    this.vscode.postMessage(message);
+  }
+
+  // Clipboard message handler setup helpers
+  public setupClipboardHandlers(handlers: {
+    onClipboardStatus?: (hasData: boolean, componentCount: number, sourceFile?: string) => void;
+    onClipboardData?: (data: any) => void;
+    onPasteError?: (error: string) => void;
+  }) {
+    if (handlers.onClipboardStatus) {
+      this.onMessage('clipboard-status', (message) => {
+        if (message.type === 'clipboard-status') {
+          handlers.onClipboardStatus!(
+            message.hasData, 
+            message.componentCount, 
+            message.sourceFile
+          );
+        }
+      });
+    }
+
+    if (handlers.onClipboardData) {
+      this.onMessage('clipboard-data', (message) => {
+        if (message.type === 'clipboard-data') {
+          handlers.onClipboardData!(message.data);
+        }
+      });
+    }
+
+    if (handlers.onPasteError) {
+      this.onMessage('paste-error', (message) => {
+        if (message.type === 'paste-error') {
+          handlers.onPasteError!(message.error);
+        }
+      });
+    }
+  }
+
+  // Remove clipboard handlers
+  public removeClipboardHandlers() {
+    this.offMessage('clipboard-status');
+    this.offMessage('clipboard-data');
+    this.offMessage('paste-error');
+  }
+
+  // Utility method to check if clipboard operations are supported
+  public supportsClipboard(): boolean {
+    return this.isReady;
+  }
+
+  // Get current ready state
+  public getReadyState(): boolean {
+    return this.isReady;
+  }
+
+  // Debug method to list active handlers
+  public getActiveHandlers(): string[] {
+    return Array.from(this.handlers.keys());
   }
 }
 

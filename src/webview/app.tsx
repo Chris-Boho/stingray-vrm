@@ -4,6 +4,7 @@ import { CanvasContainer } from './components/Canvas/CanvasContainer';
 import { vscodeService } from './services/vscodeService';
 import { useDocumentStore } from './stores/documentStore';
 import { useEditorStore } from './stores/editorStore';
+import { useClipboardStore } from './stores/clipboardStore';
 import type { ExtensionMessage } from '../shared/messages';
 
 export const App: React.FC = () => {
@@ -27,6 +28,14 @@ export const App: React.FC = () => {
     setTheme, 
     setLoading 
   } = useEditorStore();
+
+  // Clipboard store for handling clipboard operations
+  const {
+    handleClipboardStatus,
+    handleClipboardData,
+    handlePasteError,
+    requestClipboardStatus
+  } = useClipboardStore();
 
   useEffect(() => {
     // Set up message handlers
@@ -61,6 +70,24 @@ export const App: React.FC = () => {
       }
     });
 
+    // Set up clipboard message handlers
+    vscodeService.setupClipboardHandlers({
+      onClipboardStatus: (hasData: boolean, componentCount: number, sourceFile?: string) => {
+        console.log(`📋 Clipboard status received: hasData=${hasData}, count=${componentCount}, source=${sourceFile}`);
+        handleClipboardStatus(hasData, componentCount, sourceFile);
+      },
+      
+      onClipboardData: (data: any) => {
+        console.log('📋 Clipboard data received for paste operation:', data);
+        handleClipboardData(data);
+      },
+      
+      onPasteError: (error: string) => {
+        console.error('📋 Paste operation failed:', error);
+        handlePasteError(error);
+      }
+    });
+
     // Mark service as ready to process queued messages
     vscodeService.markReady();
     
@@ -72,14 +99,31 @@ export const App: React.FC = () => {
     setIsReady(true);
     console.log('App setup complete');
 
+    // Request initial clipboard status
+    setTimeout(() => {
+      requestClipboardStatus();
+      console.log('Requested initial clipboard status');
+    }, 100);
+
     // Cleanup
     return () => {
       vscodeService.offMessage('update');
       vscodeService.offMessage('theme-changed');
       vscodeService.offMessage('settings-changed');
+      vscodeService.removeClipboardHandlers();
       reset();
     };
-  }, [loadDocument, setTheme, setLoading, reset, mode]);
+  }, [
+    loadDocument, 
+    setTheme, 
+    setLoading, 
+    reset, 
+    mode, 
+    handleClipboardStatus, 
+    handleClipboardData, 
+    handlePasteError,
+    requestClipboardStatus
+  ]);
 
   const handleSave = async () => {
     if (document && isDirty) {
@@ -220,17 +264,33 @@ export const App: React.FC = () => {
                 <li>• Message communication system</li>
               </ul>
               
-              <p className="font-medium text-green-400">🚧 Phase 2: State Management & Data Flow</p>
+              <p className="font-medium">✅ Phase 2: State Management & Data Flow</p>
               <ul className="text-xs text-vscode-secondary space-y-1">
                 <li>• Zustand stores implemented</li>
                 <li>• VRM parser service created</li>
                 <li>• Document state management</li>
                 <li>• Component and selection stores</li>
               </ul>
+
+              <p className="font-medium">✅ Phase 3: Visual Workflow Canvas</p>
+              <ul className="text-xs text-vscode-secondary space-y-1">
+                <li>• React Flow integration</li>
+                <li>• Component rendering system</li>
+                <li>• Professional visual design</li>
+                <li>• Connection visualization</li>
+              </ul>
+
+              <p className="font-medium text-blue-400">🚧 Phase 4: Component Interactions</p>
+              <ul className="text-xs text-vscode-secondary space-y-1">
+                <li>• Drag & drop functionality</li>
+                <li>• Selection system</li>
+                <li>• Connection management</li>
+                <li>• Copy & paste system ⭐ NEW</li>
+              </ul>
             </div>
             
             <div className="text-xs text-vscode-secondary">
-              Ready to load VRM documents. Open a .vrm file to get started.
+              Ready to load VRM documents with cross-file copy & paste support.
             </div>
           </div>
         </div>

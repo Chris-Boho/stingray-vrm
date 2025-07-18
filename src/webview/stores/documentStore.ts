@@ -1,8 +1,9 @@
 import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
-import { VrmDocument, VrmComponent, FileState, VrmError } from '../types/vrm';
+import { VrmDocument, VrmComponent, FileState, VrmError, SectionType } from '../types/vrm';
 import { VrmParserService } from '../services/vrmParser';
 import { vscodeService } from '../services/vscodeService';
+import { useEditorStore } from './editorStore';
 
 interface DocumentState {
   // Document data
@@ -30,6 +31,10 @@ interface DocumentState {
   clearErrors: () => void;
   addError: (error: VrmError) => void;
   reset: () => void;
+
+  // Helper functions to get components by ID (always use active section)
+  getComponentsByIds: (componentIds: number[]) => VrmComponent[];
+  getAllComponentIds: () => number[];
 }
 
 const initialState = {
@@ -271,6 +276,30 @@ export const useDocumentStore = create<DocumentState>()(
       set((state) => {
         Object.assign(state, initialState);
       });
+    },
+
+    // Helper functions to get components by ID (always use active section)
+    getComponentsByIds: (componentIds: number[]) => {
+      const { document } = get();
+      if (!document || !componentIds.length) return [];
+      
+      // Always use the active section - users work on one section at a time
+      const { activeSection } = useEditorStore.getState();
+      const components = activeSection === 'preproc' ? document.preproc : document.postproc;
+      
+      return componentIds
+        .map(id => components.find(c => c.n === id))
+        .filter((component): component is VrmComponent => component !== undefined);
+    },
+
+    getAllComponentIds: () => {
+      const { document } = get();
+      if (!document) return [];
+      
+      // Always use the active section
+      const { activeSection } = useEditorStore.getState();
+      const components = activeSection === 'preproc' ? document.preproc : document.postproc;
+      return components.map(c => c.n);
     }
   }))
 );
@@ -292,8 +321,9 @@ export const useAllComponents = () => useDocumentStore(state => {
 
 export const useComponent = (componentId: number) => useDocumentStore(state => {
   if (!state.document) return null;
-  return [...state.document.preproc, ...state.document.postproc]
-    .find(c => c.n === componentId) || null;
+  // Use the simplified API - always searches active section
+  const components = state.getComponentsByIds([componentId]);
+  return components[0] || null;
 });
 
 export const useHtmlContent = () => useDocumentStore(state => state.document?.html || '');

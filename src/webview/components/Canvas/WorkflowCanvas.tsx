@@ -22,6 +22,7 @@ import { useEditorStore } from '../../stores/editorStore';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
 import { useConnectionStore } from '../../stores/connectionStore';
+import { useClipboardOperations } from '../../stores/clipboardStore';
 import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
 import StingrayEdge from './StingrayEdge';
@@ -115,6 +116,15 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     updateTempConnection, 
     tempConnection 
   } = useConnectionStore();
+  
+  // Clipboard operations
+  const { 
+    copySelected, 
+    pasteAtCenter, 
+    pasteAtPosition, 
+    canPaste, 
+    hasData: hasClipboardData 
+  } = useClipboardOperations();
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -189,44 +199,42 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     [setEdges]
   );
 
-  // In WorkflowCanvas.tsx, replace the onNodesChangeHandler callback:
-
-const onNodesChangeHandler = useCallback((changes: any[]) => {
-  // Process changes with boundary protection
-  const processedChanges = changes.map(change => {
-    if (change.type === 'position' && change.position) {
-      // Enforce boundary constraints - prevent moving below 0,0
-      const constrainedPosition = {
-        x: Math.max(0, change.position.x),
-        y: Math.max(0, change.position.y)
-      };
-      
-      // If position was constrained, update the change
-      if (constrainedPosition.x !== change.position.x || constrainedPosition.y !== change.position.y) {
-        console.log(`Constraining component ${change.id} position from (${change.position.x}, ${change.position.y}) to (${constrainedPosition.x}, ${constrainedPosition.y})`);
-        return {
-          ...change,
-          position: constrainedPosition
+  const onNodesChangeHandler = useCallback((changes: any[]) => {
+    // Process changes with boundary protection
+    const processedChanges = changes.map(change => {
+      if (change.type === 'position' && change.position) {
+        // Enforce boundary constraints - prevent moving below 0,0
+        const constrainedPosition = {
+          x: Math.max(0, change.position.x),
+          y: Math.max(0, change.position.y)
         };
+        
+        // If position was constrained, update the change
+        if (constrainedPosition.x !== change.position.x || constrainedPosition.y !== change.position.y) {
+          console.log(`Constraining component ${change.id} position from (${change.position.x}, ${change.position.y}) to (${constrainedPosition.x}, ${constrainedPosition.y})`);
+          return {
+            ...change,
+            position: constrainedPosition
+          };
+        }
+        
+        // Update VRM component position when drag ends
+        if (!change.dragging) {
+          const componentId = parseInt(change.id);
+          const documentStore = useDocumentStore.getState();
+          documentStore.updateComponent(componentId, {
+            x: Math.round(constrainedPosition.x),
+            y: Math.round(constrainedPosition.y)
+          });
+        }
       }
       
-      // Update VRM component position when drag ends
-      if (!change.dragging) {
-        const componentId = parseInt(change.id);
-        const documentStore = useDocumentStore.getState();
-        documentStore.updateComponent(componentId, {
-          x: Math.round(constrainedPosition.x),
-          y: Math.round(constrainedPosition.y)
-        });
-      }
-    }
+      return change;
+    });
     
-    return change;
-  });
-  
-  // Apply the processed changes to ReactFlow
-  onNodesChange(processedChanges);
-}, [onNodesChange]);
+    // Apply the processed changes to ReactFlow
+    onNodesChange(processedChanges);
+  }, [onNodesChange]);
 
   const onSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
     const selectedNodeIds = params.nodes.map(node => parseInt(node.id));
@@ -310,39 +318,112 @@ const onNodesChangeHandler = useCallback((changes: any[]) => {
     setPan({ x: viewport.x, y: viewport.y });
   }, [setZoom, setPan]);
 
-  // Keyboard handler for ESC key
+  // Keyboard handler for ESC key and clipboard operations
   const onKeyDown = useCallback((event: KeyboardEvent) => {
-    if (event.key === 'Escape') {
-      if (isCreating) {
-        cancelConnection();
-        console.log('Connection cancelled with ESC key');
-        return;
+    // Handle modifier keys (Ctrl/Cmd for cross-platform support)
+    const isModifierKey = event.ctrlKey || event.metaKey;
+    
+    if (isModifierKey) {
+      switch (event.key.toLowerCase()) {
+        case 'c':
+          // Copy selected components
+          if (selectedComponents.length > 0) {
+            event.preventDefault();
+            copySelected();
+            console.log(`⌨️ Copied ${selectedComponents.length} components with Ctrl+C`);
+          }
+          break;
+          
+        case 'v':
+          // Paste components
+          if (canPaste) {
+            event.preventDefault();
+            pasteAtCenter(); // Paste at a default center position
+            console.log('⌨️ Pasted components with Ctrl+V');
+          }
+          break;
+          
+        case 'x':
+          // Cut selected components (copy then delete)
+          if (selectedComponents.length > 0) {
+            event.preventDefault();
+            copySelected();
+            // TODO: Implement delete after copy
+            console.log(`⌨️ Cut ${selectedComponents.length} components with Ctrl+X (delete pending)`);
+          }
+          break;
+          
+        case 'a':
+          // Select all components in current section
+          event.preventDefault();
+          const allComponentIds = sectionComponents.map(c => c.n);
+          const allNodeIds = allComponentIds.map(id => id.toString());
+          
+          // Clear our store first
+          clearSelection();
+          
+          // Update React Flow selection
+          const reactFlowState = store.getState();
+          reactFlowState.addSelectedNodes(allNodeIds);
+          
+          // Update our store with all component IDs
+          selectComponents(allComponentIds);
+          console.log(`⌨️ Selected all ${allComponentIds.length} components with Ctrl+A`);
+          break;
       }
-      if (contextMenu.position) {
-        closeContextMenu();
-        console.log('Context menu closed with ESC key');
-        return;
-      }
-      const currentSelection = useSelectionStore.getState().selectedComponents;
-      if (currentSelection.length > 0) {
-        // Clear ReactFlow selection first
-        const reactFlowState = store.getState();
-        reactFlowState.addSelectedNodes([]);
-        
-        // Then clear our store selection
-        clearSelection();
-        console.log('Selection cleared with ESC key');
-        return;
-      }
+      return; // Don't process other keys when modifier is pressed
     }
-  }, [isCreating, 
+    
+    // Handle non-modifier keys
+    switch (event.key) {
+      case 'Escape':
+        if (isCreating) {
+          cancelConnection();
+          console.log('Connection cancelled with ESC key');
+          return;
+        }
+        if (contextMenu.position) {
+          closeContextMenu();
+          console.log('Context menu closed with ESC key');
+          return;
+        }
+        const currentSelection = useSelectionStore.getState().selectedComponents;
+        if (currentSelection.length > 0) {
+          // Clear ReactFlow selection first
+          const reactFlowState = store.getState();
+          reactFlowState.addSelectedNodes([]);
+          
+          // Then clear our store selection
+          clearSelection();
+          console.log('⌨️ Selection cleared with ESC key');
+          return;
+        }
+        break;
+        
+      case 'Delete':
+      case 'Backspace':
+        // Delete selected components
+        if (selectedComponents.length > 0) {
+          event.preventDefault();
+          // TODO: Implement component deletion
+          console.log(`⌨️ Delete ${selectedComponents.length} components with Delete key (pending implementation)`);
+        }
+        break;
+    }
+  }, [
+    isCreating, 
     cancelConnection, 
     contextMenu.position, 
     closeContextMenu, 
     clearSelection,
     sectionComponents,
     selectComponents,
-    store]);
+    store,
+    selectedComponents,
+    copySelected,
+    canPaste,
+    pasteAtCenter
+  ]);
 
   // Drop handling
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -432,7 +513,7 @@ const onNodesChangeHandler = useCallback((changes: any[]) => {
     setEdges(newEdges);
   }, [sectionComponents, setEdges]);
 
-  // Add keyboard event listener for ESC key
+  // Add keyboard event listener for ESC key and clipboard shortcuts
   useEffect(() => {
     window.document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -626,6 +707,19 @@ const onNodesChangeHandler = useCallback((changes: any[]) => {
           <div className="text-xs mt-1">
             Click on target component to connect<br/>
             Press ESC or click empty space to cancel
+          </div>
+        </div>
+      )}
+
+      {/* Clipboard Status Indicator */}
+      {hasClipboardData && (
+        <div className="absolute top-4 right-4 bg-blue-500/90 text-white px-3 py-2 rounded shadow-lg z-40">
+          <div className="text-xs font-medium flex items-center space-x-2">
+            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+              <path d="M8 2a1 1 0 000 2h2a1 1 0 100-2H8z"/>
+              <path d="M3 5a2 2 0 012-2 3 3 0 003 3h4a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2-2H5a2 2 0 01-2-2V5z"/>
+            </svg>
+            <span>📋 Clipboard ready</span>
           </div>
         </div>
       )}
