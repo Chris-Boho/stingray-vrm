@@ -23,6 +23,7 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { useClipboardOperations } from '../../stores/clipboardStore';
+import { useMousePositionForClipboard, useMousePositionForConnections } from '../../hooks/useMousePosition';
 import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
 import StingrayEdge from './StingrayEdge';
@@ -125,6 +126,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     canPaste, 
     hasData: hasClipboardData 
   } = useClipboardOperations();
+
+  // Mouse position tracking hooks
+  const { trackMousePosition, getPastePosition } = useMousePositionForClipboard();
+  const { connectionEndPosition, updateConnectionPosition } = useMousePositionForConnections();
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
@@ -284,15 +289,16 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
   }, [reactFlowInstance]);
 
   const onPaneMouseMove = useCallback((event: React.MouseEvent) => {
+    // Track mouse position for clipboard operations
+    trackMousePosition(event);
+
     if (isCreating) {
-      // Update temp connection position
-      const position = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-      updateTempConnection(position);
+      // Update connection position using the connection-specific hook
+      updateConnectionPosition(event);
+      // Also update the connection store with the current position
+      updateTempConnection(connectionEndPosition);
     }
-  }, [isCreating, updateTempConnection, reactFlowInstance]);
+  }, [isCreating, trackMousePosition, updateConnectionPosition, updateTempConnection, connectionEndPosition]);
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
     event.preventDefault();
@@ -335,11 +341,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           break;
           
         case 'v':
-          // Paste components
+          // Paste components at current mouse position
           if (canPaste) {
             event.preventDefault();
-            pasteAtCenter(); // Paste at a default center position
-            console.log('⌨️ Pasted components with Ctrl+V');
+            const pastePosition = getPastePosition();
+            pasteAtPosition(pastePosition);
+            console.log(`⌨️ Pasted components with Ctrl+V at mouse position (${pastePosition.x}, ${pastePosition.y})`);
           }
           break;
           
@@ -422,7 +429,10 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
     selectedComponents,
     copySelected,
     canPaste,
-    pasteAtCenter
+    trackMousePosition,
+    updateConnectionPosition,
+    getPastePosition,
+    connectionEndPosition
   ]);
 
   // Drop handling
@@ -707,19 +717,6 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({
           <div className="text-xs mt-1">
             Click on target component to connect<br/>
             Press ESC or click empty space to cancel
-          </div>
-        </div>
-      )}
-
-      {/* Clipboard Status Indicator */}
-      {hasClipboardData && (
-        <div className="absolute top-4 right-4 bg-blue-500/90 text-white px-3 py-2 rounded shadow-lg z-40">
-          <div className="text-xs font-medium flex items-center space-x-2">
-            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M8 2a1 1 0 000 2h2a1 1 0 100-2H8z"/>
-              <path d="M3 5a2 2 0 012-2 3 3 0 003 3h4a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2-2H5a2 2 0 01-2-2V5z"/>
-            </svg>
-            <span>📋 Clipboard ready</span>
           </div>
         </div>
       )}

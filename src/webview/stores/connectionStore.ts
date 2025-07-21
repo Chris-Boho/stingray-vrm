@@ -67,8 +67,7 @@ export const useConnectionStore = create<ConnectionStoreState>()(
 
       // Update the VRM component data
       const documentStore = useDocumentStore.getState();
-      const sourceComponentData = documentStore.document?.preproc.find(c => c.n === sourceComponent) ||
-                                 documentStore.document?.postproc.find(c => c.n === sourceComponent);
+      const sourceComponentData = documentStore.getComponentsByIds([sourceComponent])[0];
 
       if (sourceComponentData) {
         const updates: any = {};
@@ -110,14 +109,19 @@ export const useConnectionStore = create<ConnectionStoreState>()(
     updateTempConnection: (position: { x: number; y: number }) => {
       const { sourceComponent } = get();
       
-      if (!sourceComponent) return;
+      if (!sourceComponent) {
+        console.warn('No source component for temp connection update');
+        return;
+      }
 
-      // Get source component position
+      // Get source component position using the simplified helper
       const documentStore = useDocumentStore.getState();
-      const sourceComponentData = documentStore.document?.preproc.find(c => c.n === sourceComponent) ||
-                                 documentStore.document?.postproc.find(c => c.n === sourceComponent);
+      const sourceComponentData = documentStore.getComponentsByIds([sourceComponent])[0];
 
-      if (!sourceComponentData) return;
+      if (!sourceComponentData) {
+        console.warn('Source component not found for temp connection');
+        return;
+      }
 
       set((state) => {
         state.tempConnection = {
@@ -125,7 +129,7 @@ export const useConnectionStore = create<ConnectionStoreState>()(
             x: sourceComponentData.x + 16, // Center of 32px component
             y: sourceComponentData.y + 32   // Bottom of component
           },
-          end: position
+          end: position // Use the position provided by the mouse hook
         };
       });
     },
@@ -137,15 +141,10 @@ export const useConnectionStore = create<ConnectionStoreState>()(
         return false;
       }
 
-      // Get component data
+      // Get component data using the simplified helper
       const documentStore = useDocumentStore.getState();
-      const allComponents = [
-        ...(documentStore.document?.preproc || []),
-        ...(documentStore.document?.postproc || [])
-      ];
-
-      const sourceComponent = allComponents.find(c => c.n === sourceId);
-      const targetComponent = allComponents.find(c => c.n === targetId);
+      const sourceComponent = documentStore.getComponentsByIds([sourceId])[0];
+      const targetComponent = documentStore.getComponentsByIds([targetId])[0];
 
       if (!sourceComponent || !targetComponent) {
         console.log('Source or target component not found');
