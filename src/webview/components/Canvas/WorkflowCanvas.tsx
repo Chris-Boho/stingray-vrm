@@ -1,19 +1,19 @@
-import React, { useCallback, useMemo, useEffect, useState } from 'react';
+import React, { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import {
-  ReactFlow,
-  Node,
-  Edge,
-  addEdge,
-  Connection,
-  useNodesState,
-  useEdgesState,
-  Controls,
-  MiniMap,
-  Background,
-  BackgroundVariant,
-  Panel,
-  useReactFlow,
-  useStoreApi
+	ReactFlow,
+	Node,
+	Edge,
+	addEdge,
+	Connection,
+	useNodesState,
+	useEdgesState,
+	Controls,
+	MiniMap,
+	Background,
+	BackgroundVariant,
+	Panel,
+	useReactFlow,
+	useStoreApi
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 
@@ -23,7 +23,11 @@ import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { useClipboardOperations } from '../../stores/clipboardStore';
-import { useMousePositionForClipboard, useMousePositionForConnections } from '../../hooks/useMousePosition';
+import {
+	useMousePosition,
+	useMousePositionForClipboard,
+	useMousePositionForConnections
+} from '../../stores/mouseStore';
 import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
 import StingrayEdge from './StingrayEdge';
@@ -31,695 +35,750 @@ import { ContextMenu } from './ContextMenu';
 
 // Define custom edge types
 const edgeTypes = {
-  stingray: StingrayEdge,
+	stingray: StingrayEdge
 };
 
 interface WorkflowCanvasProps {
-  section: SectionType;
-  className?: string;
+	section: SectionType;
+	className?: string;
 }
 
 interface ContextMenuState {
-  position: { x: number; y: number } | null;
-  targetComponentId?: number;
-  canvasPosition?: { x: number; y: number };
+	position: { x: number; y: number } | null;
+	targetComponentId?: number;
+	canvasPosition?: { x: number; y: number };
 }
 
 // Convert VRM component to ReactFlow node
 const convertVrmComponentToNode = (component: VrmComponent): Node => {
-  return {
-    id: component.n.toString(),
-    type: NODE_TYPES.VRM_COMPONENT,
-    position: { 
-      x: component.x, 
-      y: component.y 
-    },
-    data: {
-      component,
-      label: component.c || component.t,
-      type: component.t,
-    },
-    selected: false,
-    draggable: true,
-  };
+	return {
+		id: component.n.toString(),
+		type: NODE_TYPES.VRM_COMPONENT,
+		position: {
+			x: component.x,
+			y: component.y
+		},
+		data: {
+			component,
+			label: component.c || component.t,
+			type: component.t
+		},
+		selected: false,
+		draggable: true
+	};
 };
 
 // Convert VRM connections to ReactFlow edges
 const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
-  const edges: Edge[] = [];
-  
-  components.forEach(component => {
-    // Primary connection (first j element) - Light blue
-    if (component.j && component.j[0] && component.j[0] > 0) {
-      const targetExists = components.some(c => c.n === component.j[0]);
-      if (targetExists) {
-        edges.push({
-          id: `e${component.n}-${component.j[0]}`,
-          source: component.n.toString(),
-          target: component.j[0].toString(),
-          type: 'stingray',  // Use our custom edge type
-          data: { connectionType: 'primary' }
-        });
-      }
-    }
-    
-    // Secondary connection (second j element) - Grey
-    if (component.j && component.j[1] && component.j[1] > 0) {
-      const targetExists = components.some(c => c.n === component.j[1]);
-      if (targetExists) {
-        edges.push({
-          id: `e${component.n}-${component.j[1]}-secondary`,
-          source: component.n.toString(),
-          target: component.j[1].toString(),
-          type: 'stingray',  // Use our custom edge type
-          data: { connectionType: 'secondary' }
-        });
-      }
-    }
-  });
-  
-  console.log('Generated edges:', edges);
-  return edges;
+	const edges: Edge[] = [];
+
+	components.forEach((component) => {
+		// Primary connection (first j element) - Light blue
+		if (component.j && component.j[0] && component.j[0] > 0) {
+			const targetExists = components.some((c) => c.n === component.j[0]);
+			if (targetExists) {
+				edges.push({
+					id: `e${component.n}-${component.j[0]}`,
+					source: component.n.toString(),
+					target: component.j[0].toString(),
+					type: 'stingray', // Use our custom edge type
+					data: { connectionType: 'primary' }
+				});
+			}
+		}
+
+		// Secondary connection (second j element) - Grey
+		if (component.j && component.j[1] && component.j[1] > 0) {
+			const targetExists = components.some((c) => c.n === component.j[1]);
+			if (targetExists) {
+				edges.push({
+					id: `e${component.n}-${component.j[1]}-secondary`,
+					source: component.n.toString(),
+					target: component.j[1].toString(),
+					type: 'stingray', // Use our custom edge type
+					data: { connectionType: 'secondary' }
+				});
+			}
+		}
+	});
+
+	console.log('Generated edges:', edges);
+	return edges;
 };
 
-export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ 
-  section, 
-  className = '' 
-}) => {
-  // ✅ ALL HOOKS FIRST - before any conditional logic or early returns
-  const { document } = useDocumentStore();
-  const { zoom, setZoom, pan, setPan, grid } = useEditorStore();
-  const { selectedComponents, selectComponents, clearSelection } = useSelectionStore();
-  const { createComponent } = useComponentStore();
-  const { 
-    isCreating, 
-    cancelConnection, 
-    updateTempConnection, 
-    tempConnection 
-  } = useConnectionStore();
-  
-  // Clipboard operations
-  const { 
-    copySelected, 
-    pasteAtCenter, 
-    pasteAtPosition, 
-    canPaste, 
-    hasData: hasClipboardData 
-  } = useClipboardOperations();
+export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, className = '' }) => {
+	// Create a ref for the canvas container to track mouse position
+	const canvasRef = useRef<HTMLDivElement>(null);
 
-  // Mouse position tracking hooks
-  const { trackMousePosition, getPastePosition } = useMousePositionForClipboard();
-  const { connectionEndPosition, updateConnectionPosition } = useMousePositionForConnections();
+	// ✅ ALL HOOKS FIRST - before any conditional logic or early returns
+	const { document } = useDocumentStore();
+	const { zoom, setZoom, pan, setPan, grid } = useEditorStore();
+	const { selectedComponents, selectComponents, clearSelection } = useSelectionStore();
+	const { createComponent } = useComponentStore();
+	const { isCreating, cancelConnection, updateTempConnection, tempConnection } = useConnectionStore();
 
-  // Context menu state
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>({
-    position: null,
-    targetComponentId: undefined,
-    canvasPosition: undefined
-  });
+	// Clipboard operations
+	const {
+		copySelected,
+		pasteAtCenter,
+		pasteAtPosition,
+		canPaste,
+		hasData: hasClipboardData
+	} = useClipboardOperations();
 
-  // Debug: Log current selection state
-  useEffect(() => {
-    console.log('🔍 Current selectedComponents in store:', selectedComponents);
-  }, [selectedComponents]);
-  
-  // Use React Flow instance for coordinate conversion
-  const reactFlowInstance = useReactFlow();
-  const store = useStoreApi();
-  
-  // State for drag over effect
-  const [isDragOver, setIsDragOver] = useState(false);
+	// Mouse position tracking hooks
+	const { updatePosition } = useMousePosition();
+	const { trackMousePosition, getPastePosition } = useMousePositionForClipboard();
+	const { connectionEndPosition, updateConnectionPosition } = useMousePositionForConnections();
 
-  // Get components for the current section
-  const sectionComponents = useMemo(() => {
-    if (!document) return [];
-    return section === 'preproc' ? document.preproc : document.postproc;
-  }, [document, section]);
+	// Context menu state
+	const [contextMenu, setContextMenu] = useState<ContextMenuState>({
+		position: null,
+		targetComponentId: undefined,
+		canvasPosition: undefined
+	});
 
-  // Calculate dynamic canvas size based on component positions
-  const canvasSize = useMemo(() => {
-    if (sectionComponents.length === 0) {
-      return { width: 1200, height: 800 }; // Default size for empty sections
-    }
+	// Debug: Log current selection state
+	useEffect(() => {
+		console.log('🔍 Current selectedComponents in store:', selectedComponents);
+	}, [selectedComponents]);
 
-    // Find the bounds of all components
-    const maxX = Math.max(...sectionComponents.map(c => c.x + 128)); // Add component width
-    const maxY = Math.max(...sectionComponents.map(c => c.y + 32));  // Add component height
-    
-    // Add padding: 500px below highest component, 200px to the right of rightmost
-    const dynamicWidth = Math.max(1200, maxX + 200);
-    const dynamicHeight = Math.max(800, maxY + 500);
-    
-    console.log('Canvas size calculated:', { 
-      componentsCount: sectionComponents.length,
-      maxX, 
-      maxY, 
-      dynamicWidth, 
-      dynamicHeight 
-    });
-    
-    return { width: dynamicWidth, height: dynamicHeight };
-  }, [sectionComponents]);
+	// Use React Flow instance for coordinate conversion
+	const reactFlowInstance = useReactFlow();
+	const store = useStoreApi();
 
-  // Convert VRM components to ReactFlow nodes
-  const initialNodes = useMemo(() => {
-    return sectionComponents.map(convertVrmComponentToNode);
-  }, [sectionComponents]);
+	// State for drag over effect
+	const [isDragOver, setIsDragOver] = useState(false);
 
-  // Convert VRM connections to ReactFlow edges
-  const initialEdges = useMemo(() => {
-    return convertConnectionsToEdges(sectionComponents);
-  }, [sectionComponents]);
+	// Get components for the current section
+	const sectionComponents = useMemo(() => {
+		if (!document) return [];
+		return section === 'preproc' ? document.preproc : document.postproc;
+	}, [document, section]);
 
-  // ✅ Initialize ReactFlow state hooks
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+	// Calculate dynamic canvas size based on component positions
+	const canvasSize = useMemo(() => {
+		if (sectionComponents.length === 0) {
+			return { width: 1200, height: 800 }; // Default size for empty sections
+		}
 
-  // ✅ All callback hooks
-  const onConnect = useCallback(
-    (params: Connection) => {
-      setEdges((eds) => addEdge(params, eds));
-      // TODO: Update the VRM component data
-    },
-    [setEdges]
-  );
+		// Find the bounds of all components
+		const maxX = Math.max(...sectionComponents.map((c) => c.x + 128)); // Add component width
+		const maxY = Math.max(...sectionComponents.map((c) => c.y + 32)); // Add component height
 
-  const onNodesChangeHandler = useCallback((changes: any[]) => {
-    // Process changes with boundary protection
-    const processedChanges = changes.map(change => {
-      if (change.type === 'position' && change.position) {
-        // Enforce boundary constraints - prevent moving below 0,0
-        const constrainedPosition = {
-          x: Math.max(0, change.position.x),
-          y: Math.max(0, change.position.y)
-        };
-        
-        // If position was constrained, update the change
-        if (constrainedPosition.x !== change.position.x || constrainedPosition.y !== change.position.y) {
-          console.log(`Constraining component ${change.id} position from (${change.position.x}, ${change.position.y}) to (${constrainedPosition.x}, ${constrainedPosition.y})`);
-          return {
-            ...change,
-            position: constrainedPosition
-          };
-        }
-        
-        // Update VRM component position when drag ends
-        if (!change.dragging) {
-          const componentId = parseInt(change.id);
-          const documentStore = useDocumentStore.getState();
-          documentStore.updateComponent(componentId, {
-            x: Math.round(constrainedPosition.x),
-            y: Math.round(constrainedPosition.y)
-          });
-        }
-      }
-      
-      return change;
-    });
-    
-    // Apply the processed changes to ReactFlow
-    onNodesChange(processedChanges);
-  }, [onNodesChange]);
+		// Add padding: 500px below highest component, 200px to the right of rightmost
+		const dynamicWidth = Math.max(1200, maxX + 200);
+		const dynamicHeight = Math.max(800, maxY + 500);
 
-  const onSelectionChange = useCallback((params: { nodes: Node[]; edges: Edge[] }) => {
-    const selectedNodeIds = params.nodes.map(node => parseInt(node.id));
-    selectComponents(selectedNodeIds);
-  }, [selectComponents]);
+		console.log('Canvas size calculated:', {
+			componentsCount: sectionComponents.length,
+			maxX,
+			maxY,
+			dynamicWidth,
+			dynamicHeight
+		});
 
-  const onPaneClick = useCallback((event: React.MouseEvent) => {
-    // Close context menu on any click
-    setContextMenu({ position: null });
-    
-    // Check if we clicked on a node - if so, don't clear selection
-    const target = event.target as HTMLElement;
-    const clickedOnNode = target.closest('.react-flow__node');
-    
-    if (clickedOnNode) {
-      console.log('Clicked on node, not clearing selection');
-      return;
-    }
-    
-    // Cancel connection creation if clicking on empty space
-    if (isCreating) {
-      cancelConnection();
-      console.log('Connection cancelled by clicking on empty space');
-      return;
-    }
-  
-    console.log('Clearing selection from pane click');
-    clearSelection();
-  }, [clearSelection, isCreating, cancelConnection]);
+		return { width: dynamicWidth, height: dynamicHeight };
+	}, [sectionComponents]);
 
-  const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
-    event.preventDefault();
-    
-    // Get the canvas position for potential component insertion
-    const canvasPosition = reactFlowInstance.screenToFlowPosition({
-      x: event.clientX,
-      y: event.clientY,
-    });
-    
-    setContextMenu({
-      position: { x: event.clientX, y: event.clientY },
-      targetComponentId: undefined,
-      canvasPosition
-    });
-    
-    console.log('📋 Canvas context menu opened at:', canvasPosition);
-  }, [reactFlowInstance]);
+	// Convert VRM components to ReactFlow nodes
+	const initialNodes = useMemo(() => {
+		return sectionComponents.map(convertVrmComponentToNode);
+	}, [sectionComponents]);
 
-  const onPaneMouseMove = useCallback((event: React.MouseEvent) => {
-    // Track mouse position for clipboard operations
-    trackMousePosition(event);
+	// Convert VRM connections to ReactFlow edges
+	const initialEdges = useMemo(() => {
+		return convertConnectionsToEdges(sectionComponents);
+	}, [sectionComponents]);
 
-    if (isCreating) {
-      // Update connection position using the connection-specific hook
-      updateConnectionPosition(event);
-      // Also update the connection store with the current position
-      updateTempConnection(connectionEndPosition);
-    }
-  }, [isCreating, trackMousePosition, updateConnectionPosition, updateTempConnection, connectionEndPosition]);
+	// ✅ Initialize ReactFlow state hooks
+	const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+	const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    const componentId = parseInt(node.id);
-    
-    setContextMenu({
-      position: { x: event.clientX, y: event.clientY },
-      targetComponentId: componentId,
-      canvasPosition: undefined
-    });
-    
-    console.log('📋 Node context menu opened for component:', componentId);
-  }, []);
+	// ✅ All callback hooks
+	const onConnect = useCallback(
+		(params: Connection) => {
+			setEdges((eds) => addEdge(params, eds));
+			// TODO: Update the VRM component data
+		},
+		[setEdges]
+	);
 
-  const closeContextMenu = useCallback(() => {
-    setContextMenu({ position: null });
-  }, []);
+	const onNodesChangeHandler = useCallback(
+		(changes: any[]) => {
+			// Process changes with boundary protection
+			const processedChanges = changes.map((change) => {
+				if (change.type === 'position' && change.position) {
+					// Enforce boundary constraints - prevent moving below 0,0
+					const constrainedPosition = {
+						x: Math.max(0, change.position.x),
+						y: Math.max(0, change.position.y)
+					};
 
-  const onViewportChange = useCallback((viewport: { x: number; y: number; zoom: number }) => {
-    setZoom(viewport.zoom);
-    setPan({ x: viewport.x, y: viewport.y });
-  }, [setZoom, setPan]);
+					// If position was constrained, update the change
+					if (constrainedPosition.x !== change.position.x || constrainedPosition.y !== change.position.y) {
+						console.log(
+							`Constraining component ${change.id} position from (${change.position.x}, ${change.position.y}) to (${constrainedPosition.x}, ${constrainedPosition.y})`
+						);
+						return {
+							...change,
+							position: constrainedPosition
+						};
+					}
 
-  // Keyboard handler for ESC key and clipboard operations
-  const onKeyDown = useCallback((event: KeyboardEvent) => {
-    // Handle modifier keys (Ctrl/Cmd for cross-platform support)
-    const isModifierKey = event.ctrlKey || event.metaKey;
-    
-    if (isModifierKey) {
-      switch (event.key.toLowerCase()) {
-        case 'c':
-          // Copy selected components
-          if (selectedComponents.length > 0) {
-            event.preventDefault();
-            copySelected();
-            console.log(`⌨️ Copied ${selectedComponents.length} components with Ctrl+C`);
-          }
-          break;
-          
-        case 'v':
-          // Paste components at current mouse position
-          if (canPaste) {
-            event.preventDefault();
-            const pastePosition = getPastePosition();
-            pasteAtPosition(pastePosition);
-            console.log(`⌨️ Pasted components with Ctrl+V at mouse position (${pastePosition.x}, ${pastePosition.y})`);
-          }
-          break;
-          
-        case 'x':
-          // Cut selected components (copy then delete)
-          if (selectedComponents.length > 0) {
-            event.preventDefault();
-            copySelected();
-            // TODO: Implement delete after copy
-            console.log(`⌨️ Cut ${selectedComponents.length} components with Ctrl+X (delete pending)`);
-          }
-          break;
-          
-        case 'a':
-          // Select all components in current section
-          event.preventDefault();
-          const allComponentIds = sectionComponents.map(c => c.n);
-          const allNodeIds = allComponentIds.map(id => id.toString());
-          
-          // Clear our store first
-          clearSelection();
-          
-          // Update React Flow selection
-          const reactFlowState = store.getState();
-          reactFlowState.addSelectedNodes(allNodeIds);
-          
-          // Update our store with all component IDs
-          selectComponents(allComponentIds);
-          console.log(`⌨️ Selected all ${allComponentIds.length} components with Ctrl+A`);
-          break;
-      }
-      return; // Don't process other keys when modifier is pressed
-    }
-    
-    // Handle non-modifier keys
-    switch (event.key) {
-      case 'Escape':
-        if (isCreating) {
-          cancelConnection();
-          console.log('Connection cancelled with ESC key');
-          return;
-        }
-        if (contextMenu.position) {
-          closeContextMenu();
-          console.log('Context menu closed with ESC key');
-          return;
-        }
-        const currentSelection = useSelectionStore.getState().selectedComponents;
-        if (currentSelection.length > 0) {
-          // Clear ReactFlow selection first
-          const reactFlowState = store.getState();
-          reactFlowState.addSelectedNodes([]);
-          
-          // Then clear our store selection
-          clearSelection();
-          console.log('⌨️ Selection cleared with ESC key');
-          return;
-        }
-        break;
-        
-      case 'Delete':
-      case 'Backspace':
-        // Delete selected components
-        if (selectedComponents.length > 0) {
-          event.preventDefault();
-          // TODO: Implement component deletion
-          console.log(`⌨️ Delete ${selectedComponents.length} components with Delete key (pending implementation)`);
-        }
-        break;
-    }
-  }, [
-    isCreating, 
-    cancelConnection, 
-    contextMenu.position, 
-    closeContextMenu, 
-    clearSelection,
-    sectionComponents,
-    selectComponents,
-    store,
-    selectedComponents,
-    copySelected,
-    canPaste,
-    trackMousePosition,
-    updateConnectionPosition,
-    getPastePosition,
-    connectionEndPosition
-  ]);
+					// Update VRM component position when drag ends
+					if (!change.dragging) {
+						const componentId = parseInt(change.id);
+						const documentStore = useDocumentStore.getState();
+						documentStore.updateComponent(componentId, {
+							x: Math.round(constrainedPosition.x),
+							y: Math.round(constrainedPosition.y)
+						});
+					}
+				}
 
-  // Drop handling
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-    setIsDragOver(true);
-    console.log('Drag over canvas');
-  }, []);
+				return change;
+			});
 
-  const onDragLeave = useCallback(() => {
-    setIsDragOver(false);
-  }, []);
+			// Apply the processed changes to ReactFlow
+			onNodesChange(processedChanges);
+		},
+		[onNodesChange]
+	);
 
-  const onDrop = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    setIsDragOver(false);
-    
-    console.log('Drop event on ReactFlow canvas');
-    
-    // Get the template data from the drag event
-    const templateData = event.dataTransfer.getData('application/json');
-    
-    if (!templateData) {
-      console.log('No template data in drop event');
-      return;
-    }
-    
-    try {
-      const template: ComponentTemplate = JSON.parse(templateData);
-      console.log('Template data:', template);
-      
-      // Calculate the position where the component was dropped
-      // Convert screen coordinates to flow coordinates
-      const position = reactFlowInstance.screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      });
-      
-      // Adjust for component size (center the component on the drop point)
-      // Component is now 32px × 32px (w-8 = 2rem = 32px)
-      const adjustedPosition = {
-        x: position.x - 16, // Half of component width (32/2)
-        y: position.y - 16, // Half of component height (32/2)
-      };
-      
-      console.log('Drop coordinates:', { 
-        client: { x: event.clientX, y: event.clientY },
-        flow: position,
-        adjusted: adjustedPosition 
-      });
-      
-      // Create the new component with adjusted position
-      const newComponent = createComponent(template.type, adjustedPosition, section);
-      console.log('Created component:', newComponent);
-      
-      // The component store should have already added it to the document
-      // React will re-render and update our nodes
-      
-    } catch (error) {
-      console.error('Error processing drop:', error);
-    }
-  }, [createComponent, section, reactFlowInstance]);
+	const onSelectionChange = useCallback(
+		(params: { nodes: Node[]; edges: Edge[] }) => {
+			const selectedNodeIds = params.nodes.map((node) => parseInt(node.id));
+			selectComponents(selectedNodeIds);
+		},
+		[selectComponents]
+	);
 
-  // ✅ All effect hooks
-  useEffect(() => {
-    const newNodes = sectionComponents.map(convertVrmComponentToNode);
-    
-    // Preserve current node positions when updating
-    setNodes(currentNodes => {
-      const nodeMap = new Map(currentNodes.map(node => [node.id, node]));
-      return newNodes.map(newNode => {
-        const existingNode = nodeMap.get(newNode.id);
-        if (existingNode) {
-          // Keep ALL existing node state
-          return {
-            ...existingNode,  // Keep everything from existing node
-            data: newNode.data,  // Only update the data
-          };
-        }
-        return newNode;
-      });
-    });
-  }, [sectionComponents, setNodes]); // DO NOT include selectedComponents
+	const onPaneClick = useCallback(
+		(event: React.MouseEvent) => {
+			// Close context menu on any click
+			setContextMenu({ position: null });
 
-  useEffect(() => {
-    const newEdges = convertConnectionsToEdges(sectionComponents);
-    setEdges(newEdges);
-  }, [sectionComponents, setEdges]);
+			// Check if we clicked on a node - if so, don't clear selection
+			const target = event.target as HTMLElement;
+			const clickedOnNode = target.closest('.react-flow__node');
 
-  // Add keyboard event listener for ESC key and clipboard shortcuts
-  useEffect(() => {
-    window.document.addEventListener('keydown', onKeyDown);
-    return () => {
-      window.document.removeEventListener('keydown', onKeyDown);
-    };
-  }, [onKeyDown]);
+			if (clickedOnNode) {
+				console.log('Clicked on node, not clearing selection');
+				return;
+			}
 
-  // ✅ NOW handle conditional rendering - after all hooks are declared
-  if (!document) {
-    return (
-      <div className={`flex items-center justify-center h-full ${className}`}>
-        <div className="text-vscode-secondary">No document loaded</div>
-      </div>
-    );
-  }
+			// Cancel connection creation if clicking on empty space
+			if (isCreating) {
+				cancelConnection();
+				console.log('Connection cancelled by clicking on empty space');
+				return;
+			}
 
-  if (sectionComponents.length === 0 && !isDragOver) {
-    return (
-      <div 
-        className={`flex items-center justify-center h-full ${className}`}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        onContextMenu={onPaneContextMenu}
-      >
-        <div className="text-center space-y-2">
-          <div className="text-vscode-foreground">No components in {section} section</div>
-          <div className="text-sm text-vscode-secondary">Drag components from the palette to add them</div>
-        </div>
-        
-        {/* Context Menu */}
-        <ContextMenu
-          position={contextMenu.position}
-          onClose={closeContextMenu}
-          targetComponentId={contextMenu.targetComponentId}
-          canvasPosition={contextMenu.canvasPosition}
-        />
-      </div>
-    );
-  }
+			console.log('Clearing selection from pane click');
+			clearSelection();
+		},
+		[clearSelection, isCreating, cancelConnection]
+	);
 
-  return (
-    <div className={`w-full relative ${className}`}>
-      {/* ReactFlow Canvas */}
-      <div 
-        className="w-full h-full" 
-        style={{ 
-          overflow: 'visible',
-          position: 'relative'
-        }}
-      >
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          onNodeMouseEnter={(event, node) => console.log('🐭 Mouse enter:', node.id, ', Current selectedComponents in store:', selectedComponents)}
-          onNodesChange={onNodesChangeHandler}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onSelectionChange={onSelectionChange}
-          onPaneClick={onPaneClick}
-          onPaneContextMenu={onPaneContextMenu}
-          onNodeContextMenu={onNodeContextMenu}
-          onPaneMouseMove={onPaneMouseMove}
-          onViewportChange={onViewportChange}
-          onDrop={onDrop}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          defaultViewport={{ x: pan.x, y: pan.y, zoom: 1.25 }}
-          selectNodesOnDrag={false}
-          selectionOnDrag={true}
-          panOnDrag={false}
-          panOnScroll={true}
-          zoomOnScroll={false}
-          preventScrolling={true}
-          minZoom={1}
-          maxZoom={2}
-          snapToGrid={grid.snapToGrid}
-          snapGrid={[grid.cellSize.x, grid.cellSize.y]}
-          translateExtent={[
-            [0, 0],
-            [canvasSize.width, canvasSize.height]
-          ]}
-          style={{ 
-            width: '100%', 
-            height: '600px',
-            backgroundColor: isDragOver ? 'rgba(96, 165, 250, 0.1)' : undefined,
-            transition: 'background-color 0.2s',
-            cursor: isCreating ? 'crosshair' : 'default'
-          }}
-        >
-          <Background
-            variant={BackgroundVariant.Dots}
-            gap={grid.cellSize.x}
-            size={2}
-            color={grid.showGrid ? 'var(--vscode-panel-border)' : 'transparent'}
-          />
-          
-          <Controls
-            position="top-right"
-            showZoom={false}
-            showFitView={false}
-            showInteractive={true}
-            style={{
-              backgroundColor: 'var(--vscode-editor-background)',
-              border: '1px solid var(--vscode-panel-border)',
-            }}
-          />
-          <MiniMap
-            position="bottom-right"
-            nodeColor="var(--vscode-button-background)"
-            nodeStrokeColor="var(--vscode-button-border)"
-            maskColor="rgba(0,0,0,0.2)"
-            style={{
-              backgroundColor: 'var(--vscode-editor-background)',
-              border: '1px solid var(--vscode-panel-border)',
-            }}
-          />
-          <Panel position="top-center">
-            <div className="bg-vscode-editor-bg border border-vscode-border rounded px-3 py-1 text-sm text-vscode-foreground">
-              {section.charAt(0).toUpperCase() + section.slice(1)} Section - {sectionComponents.length} Components
-              {isCreating && (
-                <span className="ml-2 text-blue-400">
-                  • Creating connection...
-                </span>
-              )}
-            </div>
-          </Panel>
-          
-          {/* Drop indicator */}
-          {isDragOver && (
-            <div 
-              className="absolute inset-0 flex items-center justify-center pointer-events-none"
-              style={{ zIndex: 1000 }}
-            >
-              <div className="bg-vscode-button-background text-vscode-button-foreground px-4 py-2 rounded shadow-lg">
-                Drop component here
-              </div>
-            </div>
-          )}
+	const onPaneContextMenu = useCallback(
+		(event: MouseEvent | React.MouseEvent) => {
+			event.preventDefault();
 
-          {/* Temporary Connection Line */}
-          {isCreating && tempConnection && (
-            <svg 
-              className="absolute inset-0 pointer-events-none"
-              style={{ zIndex: 1001 }}
-            >
-              <defs>
-                <marker
-                  id="temp-arrowhead"
-                  markerWidth="6"
-                  markerHeight="6"
-                  refX="5"
-                  refY="3"
-                  orient="auto"
-                >
-                  <polygon
-                    points="0 0, 6 3, 0 6"
-                    fill="#60a5fa"
-                  />
-                </marker>
-              </defs>
-              <line
-                x1={tempConnection.start.x}
-                y1={tempConnection.start.y}
-                x2={tempConnection.end.x}
-                y2={tempConnection.end.y}
-                stroke="#60a5fa"
-                strokeWidth="2"
-                strokeDasharray="5,5"
-                markerEnd="url(#temp-arrowhead)"
-              />
-            </svg>
-          )}
-        </ReactFlow>
-      </div>
+			// Get the canvas position for potential component insertion
+			const canvasPosition = reactFlowInstance.screenToFlowPosition({
+				x: event.clientX,
+				y: event.clientY
+			});
 
-      {/* Context Menu */}
-      <ContextMenu
-        position={contextMenu.position}
-        onClose={closeContextMenu}
-        targetComponentId={contextMenu.targetComponentId}
-        canvasPosition={contextMenu.canvasPosition}
-      />
+			setContextMenu({
+				position: { x: event.clientX, y: event.clientY },
+				targetComponentId: undefined,
+				canvasPosition
+			});
 
-      {/* Connection Mode Instructions */}
-      {isCreating && (
-        <div className="absolute top-4 left-4 bg-blue-500 text-white p-3 rounded shadow-lg z-50">
-          <div className="text-sm font-medium">Creating Connection</div>
-          <div className="text-xs mt-1">
-            Click on target component to connect<br/>
-            Press ESC or click empty space to cancel
-          </div>
-        </div>
-      )}
-    </div>
-  );
+			console.log('📋 Canvas context menu opened at:', canvasPosition);
+		},
+		[reactFlowInstance]
+	);
+
+	// const onPaneMouseMove = useCallback(
+	// 	(event: React.MouseEvent) => {
+	// 		// Track mouse position for clipboard operations
+	// 		trackMousePosition(event);
+
+	// 		if (isCreating) {
+	// 			// Update connection position using the connection-specific hook
+	// 			updateConnectionPosition(event);
+	// 			// Also update the connection store with the current position
+	// 			updateTempConnection(connectionEndPosition);
+	// 		}
+	// 	},
+	// 	[isCreating, trackMousePosition, updateConnectionPosition, updateTempConnection, connectionEndPosition]
+	// );
+
+	const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
+		event.preventDefault();
+		event.stopPropagation();
+
+		const componentId = parseInt(node.id);
+
+		setContextMenu({
+			position: { x: event.clientX, y: event.clientY },
+			targetComponentId: componentId,
+			canvasPosition: undefined
+		});
+
+		console.log('📋 Node context menu opened for component:', componentId);
+	}, []);
+
+	const closeContextMenu = useCallback(() => {
+		setContextMenu({ position: null });
+	}, []);
+
+	const onViewportChange = useCallback(
+		(viewport: { x: number; y: number; zoom: number }) => {
+			setZoom(viewport.zoom);
+			setPan({ x: viewport.x, y: viewport.y });
+		},
+		[setZoom, setPan]
+	);
+
+	// Keyboard handler for ESC key and clipboard operations
+	const onKeyDown = useCallback(
+		(event: KeyboardEvent) => {
+			// Handle modifier keys (Ctrl/Cmd for cross-platform support)
+			const isModifierKey = event.ctrlKey || event.metaKey;
+
+			if (isModifierKey) {
+				switch (event.key.toLowerCase()) {
+					case 'c':
+						// Copy selected components
+						if (selectedComponents.length > 0) {
+							event.preventDefault();
+							copySelected();
+							console.log(`⌨️ Copied ${selectedComponents.length} components with Ctrl+C`);
+						}
+						break;
+
+					case 'v':
+						// Paste components at current mouse position
+						if (canPaste) {
+							event.preventDefault();
+							const pastePosition = getPastePosition();
+							pasteAtPosition(pastePosition);
+							console.log(
+								`⌨️ Pasted components with Ctrl+V at mouse position (${pastePosition.x}, ${pastePosition.y})`
+							);
+						}
+						break;
+
+					case 'x':
+						// Cut selected components (copy then delete)
+						if (selectedComponents.length > 0) {
+							event.preventDefault();
+							copySelected();
+							// TODO: Implement delete after copy
+							console.log(`⌨️ Cut ${selectedComponents.length} components with Ctrl+X (delete pending)`);
+						}
+						break;
+
+					case 'a':
+						// Select all components in current section
+						event.preventDefault();
+						const allComponentIds = sectionComponents.map((c) => c.n);
+						const allNodeIds = allComponentIds.map((id) => id.toString());
+
+						// Clear our store first
+						clearSelection();
+
+						// Update React Flow selection
+						const reactFlowState = store.getState();
+						reactFlowState.addSelectedNodes(allNodeIds);
+
+						// Update our store with all component IDs
+						selectComponents(allComponentIds);
+						console.log(`⌨️ Selected all ${allComponentIds.length} components with Ctrl+A`);
+						break;
+				}
+				return; // Don't process other keys when modifier is pressed
+			}
+
+			// Handle non-modifier keys
+			switch (event.key) {
+				case 'Escape':
+					if (isCreating) {
+						cancelConnection();
+						console.log('Connection cancelled with ESC key');
+						return;
+					}
+					if (contextMenu.position) {
+						closeContextMenu();
+						console.log('Context menu closed with ESC key');
+						return;
+					}
+					const currentSelection = useSelectionStore.getState().selectedComponents;
+					if (currentSelection.length > 0) {
+						// Clear ReactFlow selection first
+						const reactFlowState = store.getState();
+						reactFlowState.addSelectedNodes([]);
+
+						// Then clear our store selection
+						clearSelection();
+						console.log('⌨️ Selection cleared with ESC key');
+						return;
+					}
+					break;
+
+				case 'Delete':
+				case 'Backspace':
+					// Delete selected components
+					if (selectedComponents.length > 0) {
+						event.preventDefault();
+						// TODO: Implement component deletion
+						console.log(
+							`⌨️ Delete ${selectedComponents.length} components with Delete key (pending implementation)`
+						);
+					}
+					break;
+			}
+		},
+		[
+			isCreating,
+			cancelConnection,
+			contextMenu.position,
+			closeContextMenu,
+			clearSelection,
+			sectionComponents,
+			selectComponents,
+			store,
+			selectedComponents,
+			copySelected,
+			canPaste,
+			trackMousePosition,
+			updateConnectionPosition,
+			getPastePosition,
+			connectionEndPosition
+		]
+	);
+
+	// Drop handling
+	const onDragOver = useCallback((event: React.DragEvent) => {
+		event.preventDefault();
+		event.dataTransfer.dropEffect = 'move';
+		setIsDragOver(true);
+		console.log('Drag over canvas');
+	}, []);
+
+	const onDragLeave = useCallback(() => {
+		setIsDragOver(false);
+	}, []);
+
+	const onDrop = useCallback(
+		(event: React.DragEvent) => {
+			event.preventDefault();
+			setIsDragOver(false);
+
+			console.log('Drop event on ReactFlow canvas');
+
+			// Get the template data from the drag event
+			const templateData = event.dataTransfer.getData('application/json');
+
+			if (!templateData) {
+				console.log('No template data in drop event');
+				return;
+			}
+
+			try {
+				const template: ComponentTemplate = JSON.parse(templateData);
+				console.log('Template data:', template);
+
+				// Calculate the position where the component was dropped
+				// Convert screen coordinates to flow coordinates
+				const position = reactFlowInstance.screenToFlowPosition({
+					x: event.clientX,
+					y: event.clientY
+				});
+
+				// Adjust for component size (center the component on the drop point)
+				// Component is now 32px × 32px (w-8 = 2rem = 32px)
+				const adjustedPosition = {
+					x: position.x - 16, // Half of component width (32/2)
+					y: position.y - 16 // Half of component height (32/2)
+				};
+
+				console.log('Drop coordinates:', {
+					client: { x: event.clientX, y: event.clientY },
+					flow: position,
+					adjusted: adjustedPosition
+				});
+
+				// Create the new component with adjusted position
+				const newComponent = createComponent(template.type, adjustedPosition, section);
+				console.log('Created component:', newComponent);
+
+				// The component store should have already added it to the document
+				// React will re-render and update our nodes
+			} catch (error) {
+				console.error('Error processing drop:', error);
+			}
+		},
+		[createComponent, section, reactFlowInstance]
+	);
+
+	// ✅ All effect hooks
+	useEffect(() => {
+		const newNodes = sectionComponents.map(convertVrmComponentToNode);
+
+		// Preserve current node positions when updating
+		setNodes((currentNodes) => {
+			const nodeMap = new Map(currentNodes.map((node) => [node.id, node]));
+			return newNodes.map((newNode) => {
+				const existingNode = nodeMap.get(newNode.id);
+				if (existingNode) {
+					// Keep ALL existing node state
+					return {
+						...existingNode, // Keep everything from existing node
+						data: newNode.data // Only update the data
+					};
+				}
+				return newNode;
+			});
+		});
+	}, [sectionComponents, setNodes]); // DO NOT include selectedComponents
+
+	useEffect(() => {
+		const newEdges = convertConnectionsToEdges(sectionComponents);
+		setEdges(newEdges);
+	}, [sectionComponents, setEdges]);
+
+	// Add mouse move event listener to canvas ref
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas) return;
+
+		const handleMouseMove = (event: MouseEvent) => {
+			// Create a React.MouseEvent-like object for compatibility
+			const reactEvent = {
+				clientX: event.clientX,
+				clientY: event.clientY
+			} as React.MouseEvent;
+
+			// Track mouse position for clipboard operations
+			trackMousePosition(reactEvent);
+			updatePosition(reactEvent);
+
+			if (isCreating) {
+				// Update connection position using the connection-specific hook
+				updateConnectionPosition(reactEvent);
+				// Also update the connection store with the current position
+				updateTempConnection(connectionEndPosition);
+			}
+		};
+
+		canvas.addEventListener('mousemove', handleMouseMove);
+
+		return () => {
+			canvas.removeEventListener('mousemove', handleMouseMove);
+		};
+	}, [
+		isCreating,
+		trackMousePosition,
+		updatePosition,
+		updateConnectionPosition,
+		updateTempConnection,
+		connectionEndPosition
+	]);
+
+	// Add keyboard event listener for ESC key and clipboard shortcuts
+	useEffect(() => {
+		window.document.addEventListener('keydown', onKeyDown);
+		return () => {
+			window.document.removeEventListener('keydown', onKeyDown);
+		};
+	}, [onKeyDown]);
+
+	// ✅ NOW handle conditional rendering - after all hooks are declared
+	if (!document) {
+		return (
+			<div className={`flex items-center justify-center h-full ${className}`}>
+				<div className='text-vscode-secondary'>No document loaded</div>
+			</div>
+		);
+	}
+
+	if (sectionComponents.length === 0 && !isDragOver) {
+		return (
+			<div
+				className={`flex items-center justify-center h-full ${className}`}
+				onDragOver={onDragOver}
+				onDragLeave={onDragLeave}
+				onDrop={onDrop}
+				onContextMenu={onPaneContextMenu}
+			>
+				<div className='text-center space-y-2'>
+					<div className='text-vscode-foreground'>No components in {section} section</div>
+					<div className='text-sm text-vscode-secondary'>Drag components from the palette to add them</div>
+				</div>
+
+				{/* Context Menu */}
+				<ContextMenu
+					position={contextMenu.position}
+					onClose={closeContextMenu}
+					targetComponentId={contextMenu.targetComponentId}
+					canvasPosition={contextMenu.canvasPosition}
+				/>
+			</div>
+		);
+	}
+
+	return (
+		<div className={`w-full relative ${className}`} ref={canvasRef}>
+			{/* ReactFlow Canvas */}
+			<div
+				className='w-full h-full'
+				style={{
+					overflow: 'visible',
+					position: 'relative'
+				}}
+			>
+				<ReactFlow
+					nodes={nodes}
+					edges={edges}
+					nodeTypes={nodeTypes}
+					edgeTypes={edgeTypes}
+					onNodeMouseEnter={(event, node) =>
+						console.log(
+							'🐭 Mouse enter:',
+							node.id,
+							', Current selectedComponents in store:',
+							selectedComponents
+						)
+					}
+					onNodesChange={onNodesChangeHandler}
+					onEdgesChange={onEdgesChange}
+					onConnect={onConnect}
+					onSelectionChange={onSelectionChange}
+					onPaneClick={onPaneClick}
+					onPaneContextMenu={onPaneContextMenu}
+					onNodeContextMenu={onNodeContextMenu}
+					// onPaneMouseMove={onPaneMouseMove}
+					onViewportChange={onViewportChange}
+					onDrop={onDrop}
+					onDragOver={onDragOver}
+					onDragLeave={onDragLeave}
+					defaultViewport={{ x: pan.x, y: pan.y, zoom: 1.25 }}
+					selectNodesOnDrag={false}
+					selectionOnDrag={true}
+					panOnDrag={false}
+					panOnScroll={true}
+					zoomOnScroll={false}
+					preventScrolling={true}
+					minZoom={1}
+					maxZoom={2}
+					snapToGrid={grid.snapToGrid}
+					snapGrid={[grid.cellSize.x, grid.cellSize.y]}
+					translateExtent={[
+						[0, 0],
+						[canvasSize.width, canvasSize.height]
+					]}
+					style={{
+						width: '100%',
+						height: '600px',
+						backgroundColor: isDragOver ? 'rgba(96, 165, 250, 0.1)' : undefined,
+						transition: 'background-color 0.2s',
+						cursor: isCreating ? 'crosshair' : 'default'
+					}}
+				>
+					<Background
+						variant={BackgroundVariant.Dots}
+						gap={grid.cellSize.x}
+						size={2}
+						color={grid.showGrid ? 'var(--vscode-panel-border)' : 'transparent'}
+					/>
+
+					<Controls
+						position='top-right'
+						showZoom={false}
+						showFitView={false}
+						showInteractive={true}
+						style={{
+							backgroundColor: 'var(--vscode-editor-background)',
+							border: '1px solid var(--vscode-panel-border)'
+						}}
+					/>
+					<MiniMap
+						position='bottom-right'
+						nodeColor='var(--vscode-button-background)'
+						nodeStrokeColor='var(--vscode-button-border)'
+						maskColor='rgba(0,0,0,0.2)'
+						style={{
+							backgroundColor: 'var(--vscode-editor-background)',
+							border: '1px solid var(--vscode-panel-border)'
+						}}
+					/>
+					<Panel position='top-center'>
+						<div className='bg-vscode-editor-bg border border-vscode-border rounded px-3 py-1 text-sm text-vscode-foreground'>
+							{section.charAt(0).toUpperCase() + section.slice(1)} Section - {sectionComponents.length}{' '}
+							Components
+							{isCreating && <span className='ml-2 text-blue-400'>• Creating connection...</span>}
+						</div>
+					</Panel>
+
+					{/* Drop indicator */}
+					{isDragOver && (
+						<div
+							className='absolute inset-0 flex items-center justify-center pointer-events-none'
+							style={{ zIndex: 1000 }}
+						>
+							<div className='bg-vscode-button-background text-vscode-button-foreground px-4 py-2 rounded shadow-lg'>
+								Drop component here
+							</div>
+						</div>
+					)}
+
+					{/* Temporary Connection Line */}
+					{isCreating && tempConnection && (
+						<svg className='absolute inset-0 pointer-events-none' style={{ zIndex: 1001 }}>
+							<defs>
+								<marker id='temp-arrowhead' markerWidth='6' markerHeight='6' refX='5' refY='3' orient='auto'>
+									<polygon points='0 0, 6 3, 0 6' fill='#60a5fa' />
+								</marker>
+							</defs>
+							<line
+								x1={tempConnection.start.x}
+								y1={tempConnection.start.y}
+								x2={tempConnection.end.x}
+								y2={tempConnection.end.y}
+								stroke='#60a5fa'
+								strokeWidth='2'
+								strokeDasharray='5,5'
+								markerEnd='url(#temp-arrowhead)'
+							/>
+						</svg>
+					)}
+				</ReactFlow>
+			</div>
+
+			{/* Context Menu */}
+			<ContextMenu
+				position={contextMenu.position}
+				onClose={closeContextMenu}
+				targetComponentId={contextMenu.targetComponentId}
+				canvasPosition={contextMenu.canvasPosition}
+			/>
+
+			{/* Connection Mode Instructions */}
+			{isCreating && (
+				<div className='absolute top-4 left-4 bg-blue-500 text-white p-3 rounded shadow-lg z-50'>
+					<div className='text-sm font-medium'>Creating Connection</div>
+					<div className='text-xs mt-1'>
+						Click on target component to connect
+						<br />
+						Press ESC or click empty space to cancel
+					</div>
+				</div>
+			)}
+		</div>
+	);
 };
