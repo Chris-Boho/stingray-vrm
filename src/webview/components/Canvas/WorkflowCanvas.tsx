@@ -32,6 +32,7 @@ import { VrmComponent, SectionType, ComponentTemplate } from '../../types/vrm';
 import { nodeTypes, NODE_TYPES } from './nodeTypes';
 import StingrayEdge from './StingrayEdge';
 import { ContextMenu } from './ContextMenu';
+import { ComponentSearch } from './ComponentSearch';
 
 // Define custom edge types
 const edgeTypes = {
@@ -49,10 +50,17 @@ interface ContextMenuState {
 	canvasPosition?: { x: number; y: number };
 }
 
+// Helper function to extract component ID from composite node ID
+const extractComponentId = (nodeId: string): number => {
+	// Format: "section-componentId" (e.g., "preproc-5" or "postproc-8")
+	const parts = nodeId.split('-');
+	return parseInt(parts[parts.length - 1], 10);
+};
+
 // Convert VRM component to ReactFlow node
-const convertVrmComponentToNode = (component: VrmComponent): Node => {
-	return {
-		id: component.n.toString(),
+const convertVrmComponentToNode = (component: VrmComponent, isHighlighted: boolean = false): Node => {
+	const newNode =  {
+		id: `${component.section}-${component.n}`,
 		type: NODE_TYPES.VRM_COMPONENT,
 		position: {
 			x: component.x,
@@ -61,11 +69,14 @@ const convertVrmComponentToNode = (component: VrmComponent): Node => {
 		data: {
 			component,
 			label: component.c || component.t,
-			type: component.t
+			type: component.t,
+			isHighlighted
 		},
 		selected: false,
 		draggable: true
 	};
+	console.log('Converted component to node:', component, newNode);
+	return newNode;
 };
 
 // Convert VRM connections to ReactFlow edges
@@ -78,9 +89,9 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
 			const targetExists = components.some((c) => c.n === component.j[0]);
 			if (targetExists) {
 				edges.push({
-					id: `e${component.n}-${component.j[0]}`,
-					source: component.n.toString(),
-					target: component.j[0].toString(),
+					id: `e${component.section}-${component.n}-${component.j[0]}`,
+					source: `${component.section}-${component.n}`,
+					target: `${component.section}-${component.j[0]}`,
 					type: 'stingray', // Use our custom edge type
 					data: { connectionType: 'primary' }
 				});
@@ -92,9 +103,9 @@ const convertConnectionsToEdges = (components: VrmComponent[]): Edge[] => {
 			const targetExists = components.some((c) => c.n === component.j[1]);
 			if (targetExists) {
 				edges.push({
-					id: `e${component.n}-${component.j[1]}-secondary`,
-					source: component.n.toString(),
-					target: component.j[1].toString(),
+					id: `e${component.section}-${component.n}-${component.j[1]}-secondary`,
+					source: `${component.section}-${component.n}`,
+					target: `${component.section}-${component.j[1]}`,
 					type: 'stingray', // Use our custom edge type
 					data: { connectionType: 'secondary' }
 				});
@@ -112,7 +123,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 
 	// ✅ ALL HOOKS FIRST - before any conditional logic or early returns
 	const { document } = useDocumentStore();
-	const { zoom, setZoom, pan, setPan, grid } = useEditorStore();
+	const { zoom, setZoom, pan, setPan, grid, setActiveSection } = useEditorStore();
 	const { selectedComponents, selectComponents, clearSelection } = useSelectionStore();
 	const { createComponent } = useComponentStore();
 	const { isCreating, cancelConnection, updateTempConnection, tempConnection } = useConnectionStore();
@@ -138,6 +149,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 		canvasPosition: undefined
 	});
 
+	// Search state
+	const [isSearchOpen, setIsSearchOpen] = useState(false);
+	
+	// Highlighted components state for search - now uses unique IDs (section-componentId)
+	const [highlightedComponents, setHighlightedComponents] = useState<string[]>([]);
+
 	// Debug: Log current selection state
 	useEffect(() => {
 		console.log('🔍 Current selectedComponents in store:', selectedComponents);
@@ -155,6 +172,37 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 		if (!document) return [];
 		return section === 'preproc' ? document.preproc : document.postproc;
 	}, [document, section]);
+
+	// Handle highlighting components from search - now expects unique IDs (section-componentId)
+	const handleHighlightComponents = useCallback((uniqueComponentIds: string[]) => {
+		setHighlightedComponents(uniqueComponentIds);
+	}, []);
+
+	// Handle scrolling to a specific component
+	const handleScrollToComponent = useCallback((componentId: number) => {
+		const component = sectionComponents.find(c => c.n === componentId);
+		if (component && reactFlowInstance) {
+			// Get current viewport to preserve zoom level and X position
+			const currentViewport = reactFlowInstance.getViewport();
+			
+			// Calculate the position to smoothly move the component into view vertically
+			// We want to position the component in the visible area, keeping current X position
+			const viewportHeight = currentViewport.zoom * window.innerHeight;
+			
+			// Position component in the upper portion of the visible area (25% from top)
+			const targetY = -(component.y - viewportHeight * 0.25);
+			
+			// Smoothly animate to the new position, keeping current X and zoom
+			reactFlowInstance.setViewport(
+				{ 
+					x: currentViewport.x, // Keep current X position unchanged
+					y: targetY, 
+					zoom: currentViewport.zoom // Keep current zoom level
+				}, 
+				{ duration: 800 } // Smooth animation duration
+			);
+		}
+	}, [sectionComponents, reactFlowInstance]);
 
 	// Calculate dynamic canvas size based on component positions
 	const canvasSize = useMemo(() => {
@@ -183,8 +231,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 
 	// Convert VRM components to ReactFlow nodes
 	const initialNodes = useMemo(() => {
-		return sectionComponents.map(convertVrmComponentToNode);
-	}, [sectionComponents]);
+		return sectionComponents.map(component => {
+			// Create unique ID for this component (section-componentId)
+			const uniqueId = `${component.section}-${component.n}`;
+			return convertVrmComponentToNode(component, highlightedComponents.includes(uniqueId));
+		});
+	}, [sectionComponents, highlightedComponents]);
 
 	// Convert VRM connections to ReactFlow edges
 	const initialEdges = useMemo(() => {
@@ -228,7 +280,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 
 					// Update VRM component position when drag ends
 					if (!change.dragging) {
-						const componentId = parseInt(change.id);
+						const componentId = extractComponentId(change.id);
 						const documentStore = useDocumentStore.getState();
 						documentStore.updateComponent(componentId, {
 							x: Math.round(constrainedPosition.x),
@@ -248,7 +300,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 
 	const onSelectionChange = useCallback(
 		(params: { nodes: Node[]; edges: Edge[] }) => {
-			const selectedNodeIds = params.nodes.map((node) => parseInt(node.id));
+			const selectedNodeIds = params.nodes.map((node) => extractComponentId(node.id));
 			selectComponents(selectedNodeIds);
 		},
 		[selectComponents]
@@ -321,7 +373,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 		event.preventDefault();
 		event.stopPropagation();
 
-		const componentId = parseInt(node.id);
+		const componentId = extractComponentId(node.id);
 
 		setContextMenu({
 			position: { x: event.clientX, y: event.clientY },
@@ -387,7 +439,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 						// Select all components in current section
 						event.preventDefault();
 						const allComponentIds = sectionComponents.map((c) => c.n);
-						const allNodeIds = allComponentIds.map((id) => id.toString());
+						const allNodeIds = allComponentIds.map((id) => `${section}-${id}`);
 
 						// Clear our store first
 						clearSelection();
@@ -399,6 +451,13 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 						// Update our store with all component IDs
 						selectComponents(allComponentIds);
 						console.log(`⌨️ Selected all ${allComponentIds.length} components with Ctrl+A`);
+						break;
+
+					case 'f':
+						// Open find/search dialog
+						event.preventDefault();
+						setIsSearchOpen(true);
+						console.log('⌨️ Opened search with Ctrl+F');
 						break;
 				}
 				return; // Don't process other keys when modifier is pressed
@@ -417,6 +476,12 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 						console.log('Context menu closed with ESC key');
 						return;
 					}
+					if (isSearchOpen) {
+						setIsSearchOpen(false);
+						setHighlightedComponents([]); // Clear highlights when closing search
+						console.log('Search closed with ESC key');
+						return;
+					}
 					const currentSelection = useSelectionStore.getState().selectedComponents;
 					if (currentSelection.length > 0) {
 						// Clear ReactFlow selection first
@@ -431,7 +496,6 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 					break;
 
 				case 'Delete':
-				case 'Backspace':
 					// Delete selected components
 					if (selectedComponents.length > 0) {
 						event.preventDefault();
@@ -458,7 +522,8 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 			trackMousePosition,
 			updateConnectionPosition,
 			getPastePosition,
-			connectionEndPosition
+			connectionEndPosition,
+			isSearchOpen
 		]
 	);
 
@@ -528,7 +593,11 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 
 	// ✅ All effect hooks
 	useEffect(() => {
-		const newNodes = sectionComponents.map(convertVrmComponentToNode);
+		const newNodes = sectionComponents.map(component => {
+			// Create unique ID for this component (section-componentId)
+			const uniqueId = `${component.section}-${component.n}`;
+			return convertVrmComponentToNode(component, highlightedComponents.includes(uniqueId));
+		});
 
 		// Preserve current node positions when updating
 		setNodes((currentNodes) => {
@@ -545,7 +614,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 				return newNode;
 			});
 		});
-	}, [sectionComponents, setNodes]); // DO NOT include selectedComponents
+	}, [sectionComponents, setNodes, highlightedComponents]); // Include highlightedComponents
 
 	useEffect(() => {
 		const newEdges = convertConnectionsToEdges(sectionComponents);
@@ -766,6 +835,15 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 				onClose={closeContextMenu}
 				targetComponentId={contextMenu.targetComponentId}
 				canvasPosition={contextMenu.canvasPosition}
+			/>
+
+			{/* Component Search */}
+			<ComponentSearch 
+				isOpen={isSearchOpen} 
+				onClose={() => setIsSearchOpen(false)}
+				onHighlightComponents={handleHighlightComponents}
+				onScrollToComponent={handleScrollToComponent}
+				onSwitchSection={setActiveSection}
 			/>
 
 			{/* Connection Mode Instructions */}

@@ -9,6 +9,7 @@ interface VrmComponentNodeData {
   component: VrmComponent;
   label: string;
   type: ComponentType;
+  isHighlighted?: boolean;
 }
 
 type VrmComponentNodeProps = NodeProps & {
@@ -127,7 +128,7 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
   data, 
   selected 
 }) => {
-  const { component, type } = data;
+  const { component, type, isHighlighted } = data;
   const { isSelected } = useSelectionStore();
   const { setEditingComponent } = useComponentStore();
   
@@ -185,6 +186,10 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
           ${isComponentSelected || selected 
             ? 'ring-2 ring-vscode-focusBorder shadow-lg scale-105' 
             : 'shadow-md'
+          }
+          ${isHighlighted 
+            ? 'ring-4 ring-violet-400 ring-opacity-75 shadow-violet-400/50 shadow-lg animate-bounce' 
+            : ''
           }
           ${component.wp === true ? 'ring-2 ring-red-400 ring-offset-1' : ''}
         `}

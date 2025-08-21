@@ -133,6 +133,9 @@ export class VrmParserService {
       }
     }
 
+    console.log(`Parsed ${components.length} components from ${sectionType} section`);
+    console.log('Components:', components);
+
     return components;
   }
 

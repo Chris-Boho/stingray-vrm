@@ -109,7 +109,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 				case 'select-all':
 					// Get all component IDs in current section
 					const allComponentIds = currentSectionComponents.map((c) => c.n);
-					const allNodeIds = allComponentIds.map((id) => id.toString());
+					const allNodeIds = allComponentIds.map((id) => `${activeSection}-${id}`);
 
 					// Clear our store first
 					clearSelection();
@@ -140,7 +140,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 					clearSelection();
 
 					// Update React Flow selection with all nodes
-					reactFlowState.addSelectedNodes(aboveComponentIds.map((id) => id.toString()));
+					reactFlowState.addSelectedNodes(aboveComponentIds.map((id) => `${activeSection}-${id}`));
 
 					// Update our store with all component IDs
 					selectComponents(aboveComponentIds);
@@ -157,7 +157,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 					clearSelection();
 
 					// Update React Flow selection with all nodes
-					reactFlowState.addSelectedNodes(belowComponentIds.map((id) => id.toString()));
+					reactFlowState.addSelectedNodes(belowComponentIds.map((id) => `${activeSection}-${id}`));
 
 					// Update our store with all component IDs
 					selectComponents(belowComponentIds);
