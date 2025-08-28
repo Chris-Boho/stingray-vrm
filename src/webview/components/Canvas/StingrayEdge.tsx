@@ -12,7 +12,7 @@ const getStingrayPath = (
 ): string => {
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
-  const pathOffset = 20; // Fixed offset length for start and end segments
+  const pathOffset = 7; // Fixed offset length for start and end segments
   let path = '';
   
   // Check if components are aligned
@@ -127,6 +127,7 @@ const StingrayEdge: React.FC<StingrayEdgeProps> = ({
   
   // Determine edge color based on connection type
   const strokeColor = data?.connectionType === 'secondary' ? '#9ca3af' : '#60a5fa';
+  const arrowOutline = data?.connectionType === 'secondary' ? '#575b62' : '#4472ab';
   
   return (
     <>
@@ -135,13 +136,15 @@ const StingrayEdge: React.FC<StingrayEdgeProps> = ({
         id={`arrowhead-${id}`}
         markerWidth="6"
         markerHeight="6"
-        refX="5"
-        refY="3"
+        refX="3.5"
+        refY="2"
         orient="auto"
       >
         <polygon
-          points="0 0, 6 3, 0 6"
+          points="0 0, 4 2, 0 4"
           fill={strokeColor}
+          stroke={arrowOutline}
+          strokeWidth="0.5"
         />
       </marker>
       </defs>

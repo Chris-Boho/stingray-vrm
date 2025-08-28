@@ -35,7 +35,7 @@
     "out",
     "**/*.test.ts",
     "**/*.test.tsx",
-    ".vscode-test",
-    "src/webview/**/*"
+    ".vscode-test"
+    // "src/webview/**/*"
   ]
 }

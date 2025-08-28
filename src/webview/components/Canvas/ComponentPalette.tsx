@@ -2,71 +2,69 @@ import React, { useState } from 'react';
 import { ComponentTemplate } from '../../types/vrm';
 import { useComponentStore } from '../../stores/componentStore';
 import { useDnD } from './DndProvider';
+import {
+  errorIconBase64,
+  externalIconBase64,
+  ifIconBase64,
+  insertUpdateIconBase64,
+  mathIconBase64,
+  multiSetIconBase64,
+  scriptIconBase64,
+  selectIconBase64,
+  systemFunctionIconBase64,
+  templateIconBase64,
+  transactionIconBase64
+} from '../../icons/base64';
 
 // Icon components for different component types
 const ComponentIcon: React.FC<{ icon: string; className?: string }> = ({ icon, className = "w-4 h-4" }) => {
-  const iconMap = {
-    database: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path d="M3 12v3c0 1.657 3.134 3 7 3s7-1.343 7-3v-3c0 1.657-3.134 3-7 3s-7-1.343-7-3z"/>
-        <path d="M3 7v3c0 1.657 3.134 3 7 3s7-1.343 7-3V7c0 1.657-3.134 3-7 3S3 8.657 3 7z"/>
-        <path d="M17 5c0 1.657-3.134 3-7 3S3 6.657 3 5s3.134-3 7-3 7 1.343 7 3z"/>
-      </svg>
-    ),
-    search: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd"/>
-      </svg>
-    ),
-    edit: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z"/>
-      </svg>
-    ),
-    function: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd"/>
-      </svg>
-    ),
-    code: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M12.316 3.051a1 1 0 01.633 1.265l-4 12a1 1 0 11-1.898-.632l4-12a1 1 0 011.265-.633zM5.707 6.293a1 1 0 010 1.414L3.414 10l2.293 2.293a1 1 0 11-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0zm8.586 0a1 1 0 011.414 0l3 3a1 1 0 010 1.414l-3 3a1 1 0 11-1.414-1.414L16.586 10l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd"/>
-      </svg>
-    ),
-    fork: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd"/>
-      </svg>
-    ),
-    error: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/>
-      </svg>
-    ),
-    variable: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z"/>
-      </svg>
-    ),
-    calculator: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 2a1 1 0 000 2h6a1 1 0 100-2H7zm6 7a1 1 0 011 1v3a1 1 0 11-2 0v-3a1 1 0 011-1zm-3 3a1 1 0 100 2h.01a1 1 0 100-2H10zm-4 1a1 1 0 011-1h.01a1 1 0 110 2H7a1 1 0 01-1-1zm1-4a1 1 0 100 2h.01a1 1 0 100-2H7zm2 0a1 1 0 100 2h.01a1 1 0 100-2H9zm2 0a1 1 0 100 2h.01a1 1 0 100-2H11zm0-2a1 1 0 100 2h.01a1 1 0 100-2H11zm-2 0a1 1 0 100 2h.01a1 1 0 100-2H9zm-2 0a1 1 0 100 2h.01a1 1 0 100-2H7z" clipRule="evenodd"/>
-      </svg>
-    ),
-    external: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z"/>
-        <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5V7h3a1 1 0 000-2H5z"/>
-      </svg>
-    ),
-    template: (
-      <svg className={className} fill="currentColor" viewBox="0 0 20 20">
-        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm0 4a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1V8zm8 0a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1V8zm0 4a1 1 0 011-1h4a1 1 0 011 1v2a1 1 0 01-1 1h-4a1 1 0 01-1-1v-2z" clipRule="evenodd"/>
-      </svg>
-    )
+  // Map component icon types to their corresponding base64 images
+  const iconMap: Record<string, string> = {
+    // Database components
+    'database': transactionIconBase64,        // SQLTRN
+    'search': selectIconBase64,               // SELECTQUERY  
+    'edit': insertUpdateIconBase64,           // INSERTUPDATEQUERY
+    
+    // Script components
+    'function': systemFunctionIconBase64,     // CSF
+    'code': scriptIconBase64,                 // SCRIPT
+    
+    // Control components
+    'fork': ifIconBase64,                     // IF
+    'error': errorIconBase64,                 // ERROR
+    
+    // Data components
+    'variable': multiSetIconBase64,           // SET
+    'calculator': mathIconBase64,             // MATH
+    
+    // Integration components
+    'external': externalIconBase64,           // EXTERNAL
+    'template': templateIconBase64,           // TEMPLATE
   };
 
-  return iconMap[icon as keyof typeof iconMap] || iconMap.code;
+  const iconSrc = iconMap[icon];
+  
+  if (iconSrc) {
+    return (
+      <img 
+        src={iconSrc} 
+        alt={icon}
+        className={className}
+        style={{ 
+          objectFit: 'contain',
+          imageRendering: 'auto'
+        }}
+      />
+    );
+  }
+
+  // Fallback to simple geometric shape for any unmapped icons
+  return (
+    <div 
+      className={`${className} bg-current rounded-sm opacity-75`}
+      style={{ aspectRatio: '1' }}
+    />
+  );
 };
 
 // Simple HTML5 drag and drop component item - following React Flow pattern
@@ -96,7 +94,7 @@ const DraggableComponentItem: React.FC<{ template: ComponentTemplate }> = ({ tem
     onDragStart={onDragStart}
     onDragEnd={onDragEnd}
     className={`
-      w-10 h-10 bg-vscode-input-bg border border-vscode-border rounded cursor-grab
+      w-16 h-16 bg-vscode-input-bg rounded-xl cursor-grab
       hover:bg-vscode-list-hoverBackground hover:border-vscode-list-focusBorder
       transition-all duration-150 select-none flex items-center justify-center
       ${isDragging ? 'opacity-50 scale-90' : 'opacity-100 scale-100'}
@@ -111,7 +109,7 @@ const DraggableComponentItem: React.FC<{ template: ComponentTemplate }> = ({ tem
   >
     <ComponentIcon 
       icon={template.icon} 
-      className="w-5 h-5 text-vscode-foreground"  // Larger icon
+      className="w-20 h-20 text-vscode-foreground rounded-xl"
     />
   </div>
   );
