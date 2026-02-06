@@ -18,6 +18,7 @@ export default defineConfig({
       }
     },
     // Ensure compatibility with VS Code webview
+    assetsInclude: ['**/*.png'],
     target: 'es2020',
     sourcemap: true
   },

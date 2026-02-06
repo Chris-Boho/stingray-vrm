@@ -81,13 +81,13 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
         this.sendClipboardStatus(webviewPanel.webview);
     }
 
+    // src/extension/VrmEditorProvider.ts
     private getHtmlForWebview(webview: vscode.Webview): string {
-        // Get the webview build directory (now in out/webview)
+        // Get the webview build directory
         const webviewUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this.context.extensionUri, 'out', 'webview')
         );
         
-        // Use a nonce for security
         const nonce = this.getNonce();
 
         return `<!DOCTYPE html>
@@ -112,6 +112,10 @@ export class VrmEditorProvider implements vscode.CustomTextEditorProvider {
                         background-color: var(--vscode-editor-background);
                     }
                 </style>
+                <script nonce="${nonce}">
+                    // IMPORTANT: Set the base URI for the webview
+                    window.__webviewUri = '${webviewUri}';
+                </script>
             </head>
             <body>
                 <div id="root">Loading VRM Editor...</div>

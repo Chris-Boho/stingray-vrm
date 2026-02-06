@@ -1,12 +1,13 @@
 import React, { createContext, useContext, useState } from 'react';
 import { ComponentTemplate, SectionType } from '../../types/vrm';
+import { ComponentMetadata } from '../../services/componentRegistry';
 import { ComponentPalette } from './ComponentPalette';
 
 // Create drag and drop context similar to React Flow example
-const DnDContext = createContext<[ComponentTemplate | null, (template: ComponentTemplate | null) => void]>([null, () => {}]);
+const DnDContext = createContext<[ComponentMetadata | null, (template: ComponentMetadata | null) => void]>([null, () => {}]);
 
 export const DnDProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [draggedTemplate, setDraggedTemplate] = useState<ComponentTemplate | null>(null);
+  const [draggedTemplate, setDraggedTemplate] = useState<ComponentMetadata | null>(null);
 
   return (
     <DnDContext.Provider value={[draggedTemplate, setDraggedTemplate]}>

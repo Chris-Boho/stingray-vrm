@@ -4,6 +4,7 @@ import { VrmComponent, ComponentType } from '../../types/vrm';
 import { useSelectionStore } from '../../stores/selectionStore';
 import { useComponentStore } from '../../stores/componentStore';
 import { useConnectionHandler } from './connectionHandler';
+import { componentRegistry } from '@/services/componentRegistry';
 
 interface VrmComponentNodeData {
   component: VrmComponent;
@@ -138,7 +139,14 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
     component.t
   );
   
-  const colors = getComponentColor(type);
+  // Get all metadata from registry
+  const metadata = componentRegistry.getComponent(type);
+  const colors = metadata?.colors || {
+    bg: 'bg-gradient-to-r from-gray-500 to-gray-600',
+    border: 'border-gray-300',
+    text: 'text-white',
+    shadow: 'shadow-gray-500/20'
+  };
   const abbreviation = getComponentAbbreviation(type);
   const isComponentSelected = isSelected(component.n);
   
@@ -198,12 +206,31 @@ export const VrmComponentNode: React.FC<VrmComponentNodeProps> = memo(({
         onDoubleClick={handleDoubleClick}
         title={`${component.n}: ${component.c || type}\n\nWith component selected:\nAlt+Click: Primary connection\nAlt+Right Click: Secondary connection`} 
       >
-        {/* Component Type Abbreviation */}
-        <div className="absolute left-0 top-0 bottom-0 flex items-center px-2 z-10">
-          <div className="text-xs font-bold tracking-wide drop-shadow-sm">
-            {abbreviation}
-          </div>
-        </div>
+        {metadata?.editorIconUrl ? (
+            <img 
+              src={metadata.editorIconUrl}
+              alt={type}
+              className="w-8 h-8 object-contain"
+            />
+          ) : (
+            <div className="text-xs font-bold tracking-wide drop-shadow-sm px-1">
+              {metadata?.abbreviation || 'UN'}
+            </div>
+          )}
+        {/* Component Icon or Abbreviation */}
+        {/* <div className="absolute left-0 top-0 bottom-0 flex items-center px-1 z-10">
+          {metadata?.iconUrl ? (
+            <img 
+              src={metadata.iconUrl}
+              alt={type}
+              className="w-6 h-6 object-contain"
+            />
+          ) : (
+            <div className="text-xs font-bold tracking-wide drop-shadow-sm px-1">
+              {metadata?.abbreviation || 'UN'}
+            </div>
+          )}
+        </div> */}
         
         {/* Component Number and Comment */}
         <div className="absolute left-8 top-0 bottom-0 min-w-max pr-2 flex items-center">

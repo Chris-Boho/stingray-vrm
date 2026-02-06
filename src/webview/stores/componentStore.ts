@@ -4,20 +4,21 @@ import { VrmComponent, ComponentTemplate, ComponentType, SectionType } from '../
 import { COMPONENT_TYPES, COMPONENT_CATEGORIES, COMPONENT_CATEGORY_MAP, GRID_SIZE } from '../../shared/constants';
 import { useDocumentStore } from './documentStore';
 import { useMemo } from 'react';
+import { componentRegistry, ComponentMetadata } from '../services/componentRegistry';
 
 interface ComponentStoreState {
   // Component templates for palette
-  templates: ComponentTemplate[];
+  templates: ComponentMetadata[];
   
   // Drag and drop state
-  draggedTemplate: ComponentTemplate | null;
+  draggedTemplate: ComponentMetadata | null;
   isDragging: boolean;
   
   // Component editing
   editingComponent: number | null;
   
   // Actions
-  setDraggedTemplate: (template: ComponentTemplate | null) => void;
+  setDraggedTemplate: (template: ComponentMetadata | null) => void;
   setIsDragging: (isDragging: boolean) => void;
   setEditingComponent: (componentId: number | null) => void;
   
@@ -32,7 +33,7 @@ interface ComponentStoreState {
   
   // Helper functions
   getNextComponentId: () => number;
-  getComponentTemplate: (type: ComponentType) => ComponentTemplate | null;
+  getComponentTemplate: (type: ComponentType) => ComponentMetadata | null;
 }
 
 // Define component templates
@@ -168,7 +169,7 @@ const componentTemplates: ComponentTemplate[] = [
 ];
 
 const initialState = {
-  templates: componentTemplates,
+  templates: componentRegistry.getAllComponents(),
   draggedTemplate: null,
   isDragging: false,
   editingComponent: null
@@ -178,7 +179,7 @@ export const useComponentStore = create<ComponentStoreState>()(
   immer((set, get) => ({
     ...initialState,
 
-    setDraggedTemplate: (template: ComponentTemplate | null) => {
+    setDraggedTemplate: (template: ComponentMetadata | null) => {
       set((state) => {
         state.draggedTemplate = template;
       });
@@ -335,7 +336,7 @@ export const useComponentTemplatesByCategory = () => {
   const templates = useComponentStore(state => state.templates);
   
   return useMemo(() => {
-    const grouped: Record<string, ComponentTemplate[]> = {};
+    const grouped: Record<string, ComponentMetadata[]> = {};
     
     templates.forEach(template => {
       if (!grouped[template.category]) {

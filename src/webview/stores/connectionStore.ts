@@ -205,7 +205,7 @@ export const useIsCreatingConnection = () => useConnectionStore(state => state.i
 export const useConnectionSource = () => useConnectionStore(state => state.sourceComponent);
 export const useConnectionType = () => useConnectionStore(state => state.sourceConnectionType);
 export const useTempConnection = () => useConnectionStore(state => state.tempConnection);
-
+export type { ConnectionStoreState };
 // Helper hooks
 export const useConnectionModeInfo = () => useConnectionStore(state => 
   state.isCreating && state.sourceComponent && state.sourceConnectionType
