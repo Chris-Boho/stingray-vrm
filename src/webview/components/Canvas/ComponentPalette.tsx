@@ -1,5 +1,3 @@
-// src/webview/components/Canvas/ComponentPalette.tsx
-
 import React, { useState } from 'react';
 import { useComponentStore } from '../../stores/componentStore';
 import { useDnD } from './DndProvider';

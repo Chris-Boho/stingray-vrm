@@ -13,7 +13,8 @@ import {
 	BackgroundVariant,
 	Panel,
 	useReactFlow,
-	useStoreApi
+	useStoreApi,
+	NodeChange
 } from '@xyflow/react';
 import '@xyflow/react/dist/base.css';
 
@@ -257,7 +258,7 @@ export const WorkflowCanvas: React.FC<WorkflowCanvasProps> = ({ section, classNa
 	);
 
 	const onNodesChangeHandler = useCallback(
-		(changes: any[]) => {
+		(changes: NodeChange[]) => {
 			// Process changes with boundary protection
 			const processedChanges = changes.map((change) => {
 				if (change.type === 'position' && change.position) {

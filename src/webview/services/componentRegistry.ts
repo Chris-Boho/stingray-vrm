@@ -54,230 +54,230 @@ class ComponentRegistry {
       colors: ComponentMetadata['colors'];
       defaultValues: any;
     }> = [
-      // Database components
-      {
-        type: 'SQLTRN',
-        label: 'SQL Transaction',
-        description: 'Begin/Commit/Rollback database transactions',
-        category: 'database',
-        icon: 'database',
-        paletteIconFile: transactionIcon,
-        editorIconFile: transactionIcon,
-        abbreviation: 'ST',
-        colors: {
-          bg: 'bg-gradient-to-r from-blue-600 to-blue-700',
-          border: 'border-blue-400',
-          text: 'text-white',
-          shadow: 'shadow-blue-500/20'
+        // Database components
+        {
+          type: 'SQLTRN',
+          label: 'SQL Transaction',
+          description: 'Begin/Commit/Rollback database transactions',
+          category: 'database',
+          icon: 'database',
+          paletteIconFile: transactionIcon,
+          editorIconFile: transactionIcon,
+          abbreviation: 'ST',
+          colors: {
+            bg: 'bg-gradient-to-r from-blue-600 to-blue-700',
+            border: 'border-blue-400',
+            text: 'text-white',
+            shadow: 'shadow-blue-500/20'
+          },
+          defaultValues: {
+            transactionName: '',
+            transactionType: 'BEGIN'
+          }
         },
-        defaultValues: {
-          transactionName: '',
-          transactionType: 'BEGIN'
-        }
-      },
-      {
-        type: 'SELECTQUERY',
-        label: 'Select Query',
-        description: 'Execute database select queries',
-        category: 'database',
-        icon: 'search',
-        paletteIconFile: selectAltIconSM,
-        editorIconFile: selectAltIcon,
-        abbreviation: 'SQ',
-        colors: {
-          bg: 'bg-gradient-to-r from-sky-500 to-sky-600',
-          border: 'border-sky-300',
-          text: 'text-white',
-          shadow: 'shadow-sky-500/20'
+        {
+          type: 'SELECTQUERY',
+          label: 'Select Query',
+          description: 'Execute database select queries',
+          category: 'database',
+          icon: 'search',
+          paletteIconFile: selectIcon,
+          editorIconFile: selectIcon,
+          abbreviation: 'SQ',
+          colors: {
+            bg: 'bg-gradient-to-r from-sky-500 to-sky-600',
+            border: 'border-sky-300',
+            text: 'text-white',
+            shadow: 'shadow-sky-500/20'
+          },
+          defaultValues: {
+            query: '',
+            params: []
+          }
         },
-        defaultValues: {
-          query: '',
-          params: []
-        }
-      },
-      {
-        type: 'INSERTUPDATEQUERY',
-        label: 'Insert/Update Query',
-        description: 'Execute database insert/update queries',
-        category: 'database',
-        icon: 'edit',
-        paletteIconFile: insertUpdateIcon,
-        editorIconFile: insertUpdateIcon,
-        abbreviation: 'IU',
-        colors: {
-          bg: 'bg-gradient-to-r from-cyan-500 to-cyan-600',
-          border: 'border-cyan-300',
-          text: 'text-white',
-          shadow: 'shadow-cyan-500/20'
+        {
+          type: 'INSERTUPDATEQUERY',
+          label: 'Insert/Update Query',
+          description: 'Execute database insert/update queries',
+          category: 'database',
+          icon: 'edit',
+          paletteIconFile: insertUpdateIcon,
+          editorIconFile: insertUpdateIcon,
+          abbreviation: 'IU',
+          colors: {
+            bg: 'bg-gradient-to-r from-cyan-500 to-cyan-600',
+            border: 'border-cyan-300',
+            text: 'text-white',
+            shadow: 'shadow-cyan-500/20'
+          },
+          defaultValues: {
+            query: '',
+            params: []
+          }
         },
-        defaultValues: {
-          query: '',
-          params: []
-        }
-      },
-      // Script components
-      {
-        type: 'CSF',
-        label: 'Script Function',
-        description: 'Call script functions with parameters',
-        category: 'script',
-        icon: 'function',
-        paletteIconFile: systemFunctionIcon,
-        editorIconFile: systemFunctionIcon,
-        abbreviation: 'CF',
-        colors: {
-          bg: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
-          border: 'border-emerald-300',
-          text: 'text-white',
-          shadow: 'shadow-emerald-500/20'
+        // Script components
+        {
+          type: 'CSF',
+          label: 'Script Function',
+          description: 'Call script functions with parameters',
+          category: 'script',
+          icon: 'function',
+          paletteIconFile: systemFunctionIcon,
+          editorIconFile: systemFunctionIcon,
+          abbreviation: 'CF',
+          colors: {
+            bg: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
+            border: 'border-emerald-300',
+            text: 'text-white',
+            shadow: 'shadow-emerald-500/20'
+          },
+          defaultValues: {
+            functionName: '',
+            returnValue: '',
+            functionParams: []
+          }
         },
-        defaultValues: {
-          functionName: '',
-          returnValue: '',
-          functionParams: []
-        }
-      },
-      {
-        type: 'SCRIPT',
-        label: 'Script Block',
-        description: 'Execute custom Pascal scripts',
-        category: 'script',
-        icon: 'code',
-        paletteIconFile: scriptIcon,
-        editorIconFile: scriptIcon,
-        abbreviation: 'SC',
-        colors: {
-          bg: 'bg-gradient-to-r from-green-500 to-green-600',
-          border: 'border-green-300',
-          text: 'text-white',
-          shadow: 'shadow-green-500/20'
+        {
+          type: 'SCRIPT',
+          label: 'Script Block',
+          description: 'Execute custom Pascal scripts',
+          category: 'script',
+          icon: 'code',
+          paletteIconFile: scriptIcon,
+          editorIconFile: scriptIcon,
+          abbreviation: 'SC',
+          colors: {
+            bg: 'bg-gradient-to-r from-green-500 to-green-600',
+            border: 'border-green-300',
+            text: 'text-white',
+            shadow: 'shadow-green-500/20'
+          },
+          defaultValues: {
+            script: '',
+            language: 'Pascal'
+          }
         },
-        defaultValues: {
-          script: '',
-          language: 'Pascal'
-        }
-      },
-      // Control components
-      {
-        type: 'IF',
-        label: 'Condition',
-        description: 'Conditional branching logic',
-        category: 'control',
-        icon: 'fork',
-        paletteIconFile: ifIcon,
-        editorIconFile: ifIcon,
-        abbreviation: 'IF',
-        colors: {
-          bg: 'bg-gradient-to-r from-amber-500 to-amber-600',
-          border: 'border-amber-300',
-          text: 'text-white',
-          shadow: 'shadow-amber-500/20'
+        // Control components
+        {
+          type: 'IF',
+          label: 'Condition',
+          description: 'Conditional branching logic',
+          category: 'control',
+          icon: 'fork',
+          paletteIconFile: ifIcon,
+          editorIconFile: ifIcon,
+          abbreviation: 'IF',
+          colors: {
+            bg: 'bg-gradient-to-r from-amber-500 to-amber-600',
+            border: 'border-amber-300',
+            text: 'text-white',
+            shadow: 'shadow-amber-500/20'
+          },
+          defaultValues: {
+            condition: ''
+          }
         },
-        defaultValues: {
-          condition: ''
-        }
-      },
-      {
-        type: 'ERROR',
-        label: 'Error',
-        description: 'Display errors and halt execution',
-        category: 'control',
-        icon: 'error',
-        paletteIconFile: errorIcon,
-        editorIconFile: errorIcon,
-        abbreviation: 'ER',
-        colors: {
-          bg: 'bg-gradient-to-r from-red-500 to-red-600',
-          border: 'border-red-300',
-          text: 'text-white',
-          shadow: 'shadow-red-500/20'
+        {
+          type: 'ERROR',
+          label: 'Error',
+          description: 'Display errors and halt execution',
+          category: 'control',
+          icon: 'error',
+          paletteIconFile: errorIcon,
+          editorIconFile: errorIcon,
+          abbreviation: 'ER',
+          colors: {
+            bg: 'bg-gradient-to-r from-red-500 to-red-600',
+            border: 'border-red-300',
+            text: 'text-white',
+            shadow: 'shadow-red-500/20'
+          },
+          defaultValues: {
+            errorMessage: ''
+          }
         },
-        defaultValues: {
-          errorMessage: ''
-        }
-      },
-      // Data components
-      {
-        type: 'SET',
-        label: 'Multi-Set Variables',
-        description: 'Variable assignment operations',
-        category: 'data',
-        icon: 'variable',
-        paletteIconFile: multiSetIcon,
-        editorIconFile: multiSetIcon,
-        abbreviation: 'SE',
-        colors: {
-          bg: 'bg-gradient-to-r from-purple-500 to-purple-600',
-          border: 'border-purple-300',
-          text: 'text-white',
-          shadow: 'shadow-purple-500/20'
+        // Data components
+        {
+          type: 'SET',
+          label: 'Multi-Set Variables',
+          description: 'Variable assignment operations',
+          category: 'data',
+          icon: 'variable',
+          paletteIconFile: multiSetIcon,
+          editorIconFile: multiSetIcon,
+          abbreviation: 'SE',
+          colors: {
+            bg: 'bg-gradient-to-r from-purple-500 to-purple-600',
+            border: 'border-purple-300',
+            text: 'text-white',
+            shadow: 'shadow-purple-500/20'
+          },
+          defaultValues: {
+            variables: []
+          }
         },
-        defaultValues: {
-          variables: []
-        }
-      },
-      {
-        type: 'MATH',
-        label: 'Math Operation',
-        description: 'Mathematical calculations',
-        category: 'data',
-        icon: 'calculator',
-        paletteIconFile: mathIcon,
-        editorIconFile: mathIcon,
-        abbreviation: 'MA',
-        colors: {
-          bg: 'bg-gradient-to-r from-violet-500 to-violet-600',
-          border: 'border-violet-300',
-          text: 'text-white',
-          shadow: 'shadow-violet-500/20'
+        {
+          type: 'MATH',
+          label: 'Math Operation',
+          description: 'Mathematical calculations',
+          category: 'data',
+          icon: 'calculator',
+          paletteIconFile: mathIcon,
+          editorIconFile: mathIcon,
+          abbreviation: 'MA',
+          colors: {
+            bg: 'bg-gradient-to-r from-violet-500 to-violet-600',
+            border: 'border-violet-300',
+            text: 'text-white',
+            shadow: 'shadow-violet-500/20'
+          },
+          defaultValues: {
+            mathName: '',
+            mathFormat: '',
+            mathParam: ''
+          }
         },
-        defaultValues: {
-          mathName: '',
-          mathFormat: '',
-          mathParam: ''
-        }
-      },
-      // Integration components
-      {
-        type: 'EXTERNAL',
-        label: 'External Call',
-        description: 'Call external rules/procedures',
-        category: 'integration',
-        icon: 'external',
-        paletteIconFile: externalIcon,
-        editorIconFile: externalIcon,
-        abbreviation: 'EX',
-        colors: {
-          bg: 'bg-gradient-to-r from-indigo-500 to-indigo-600',
-          border: 'border-indigo-300',
-          text: 'text-white',
-          shadow: 'shadow-indigo-500/20'
+        // Integration components
+        {
+          type: 'EXTERNAL',
+          label: 'External Call',
+          description: 'Call external rules/procedures',
+          category: 'integration',
+          icon: 'external',
+          paletteIconFile: externalIcon,
+          editorIconFile: externalIcon,
+          abbreviation: 'EX',
+          colors: {
+            bg: 'bg-gradient-to-r from-indigo-500 to-indigo-600',
+            border: 'border-indigo-300',
+            text: 'text-white',
+            shadow: 'shadow-indigo-500/20'
+          },
+          defaultValues: {
+            externalValue: ''
+          }
         },
-        defaultValues: {
-          externalValue: ''
+        {
+          type: 'TEMPLATE',
+          label: 'Template',
+          description: 'Process and generate templates',
+          category: 'integration',
+          icon: 'template',
+          paletteIconFile: templateIcon,
+          editorIconFile: templateIcon,
+          abbreviation: 'TP',
+          colors: {
+            bg: 'bg-gradient-to-r from-pink-500 to-pink-600',
+            border: 'border-pink-300',
+            text: 'text-white',
+            shadow: 'shadow-pink-500/20'
+          },
+          defaultValues: {
+            templateName: '',
+            templateTarget: ''
+          }
         }
-      },
-      {
-        type: 'TEMPLATE',
-        label: 'Template',
-        description: 'Process and generate templates',
-        category: 'integration',
-        icon: 'template',
-        paletteIconFile: templateIcon,
-        editorIconFile: templateIcon,
-        abbreviation: 'TP',
-        colors: {
-          bg: 'bg-gradient-to-r from-pink-500 to-pink-600',
-          border: 'border-pink-300',
-          text: 'text-white',
-          shadow: 'shadow-pink-500/20'
-        },
-        defaultValues: {
-          templateName: '',
-          templateTarget: ''
-        }
-      }
-    ];
+      ];
 
     // Initialize the map with resolved icon URLs
     componentData.forEach(data => {

@@ -91,7 +91,7 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
         {/* Toolbar Actions */}
         <div className="flex items-center space-x-2">
           {/* Clipboard Actions */}
-          <div className="flex items-center space-x-1 mr-2">
+          {/* <div className="flex items-center space-x-1 mr-2">
             <button
               onClick={handleCopy}
               disabled={selectedCount === 0}
@@ -133,7 +133,7 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
                 )}
               </div>
             </button>
-          </div>
+          </div> */}
 
           {/* Divider */}
           <div className="h-6 w-px bg-vscode-border"></div>
@@ -169,9 +169,8 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
       </header>
 
       {/* Section Tabs */}
-      <div className="bg-vscode-tab-inactiveBackground border-b border-vscode-border">
+      {/* <div className="bg-vscode-tab-inactiveBackground border-b border-vscode-border">
         <div className="flex">
-          {/* Preprocessing Tab */}
           <button
             onClick={() => handleSectionChange('preproc')}
             className={`px-4 py-2 text-sm border-r border-vscode-border transition-all duration-150 ${
@@ -188,7 +187,6 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
             </div>
           </button>
 
-          {/* Postprocessing Tab */}
           <button
             onClick={() => handleSectionChange('postproc')}
             className={`px-4 py-2 text-sm border-r border-vscode-border transition-all duration-150 ${
@@ -204,11 +202,9 @@ const EditorLayoutContent: React.FC<EditorLayoutProps> = ({ children }) => {
               </span>
             </div>
           </button>
-
-          {/* Tab Indicator */}
           <div className="flex-1 bg-vscode-tab-inactiveBackground"></div>
         </div>
-      </div>
+      </div> */}
 
       {/* Main content area with DnD integration */}
       <main className="flex-1 flex overflow-hidden">
